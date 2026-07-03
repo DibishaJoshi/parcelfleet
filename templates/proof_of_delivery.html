@@ -1,0 +1,189 @@
+{% extends "base.html" %}
+
+{% block title %}Proof of Delivery - {{ parcel.tracking_id }}{% endblock %}
+
+{% block extra_head %}
+<style>
+    body {
+        background-color: var(--bg-color);
+    }
+    
+    .sidebar, .header-bar {
+        display: none !important;
+    }
+    
+    .main-viewport, .main-content {
+        padding: 0 !important;
+        margin: 0 !important;
+        background-color: transparent !important;
+    }
+</style>
+{% endblock %}
+
+{% block full_content %}
+<div class="container py-5 text-dark">
+    <!-- Top Action bar (Not printable) -->
+    <div class="row justify-content-center mb-4 no-print">
+        <div class="col-12 col-md-10 col-lg-8 d-flex align-items-center justify-content-between">
+            <a href="javascript:window.history.back();" class="btn btn-outline-secondary rounded-pill px-3">
+                <i class="fas fa-arrow-left me-2"></i>Go Back
+            </a>
+            
+            <div class="d-flex gap-2">
+                <button class="btn btn-outline-primary rounded-pill px-3" onclick="downloadReceiptAsPDF()">
+                    <i class="fas fa-file-pdf me-2"></i>Download PDF Receipt
+                </button>
+                <button class="btn btn-primary rounded-pill px-4" onclick="window.print()" style="background-color: var(--primary-color); border: none;">
+                    <i class="fas fa-print me-2"></i>Print POD Receipt
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- PRINTABLE POD RECEIPT CARD -->
+    <div class="row justify-content-center">
+        <div class="col-12 col-md-10 col-lg-8" id="printable-receipt-area">
+            <div class="premium-card bg-white p-4 border border-light shadow-sm" style="border-radius: var(--border-radius-lg); font-size: 0.9rem;">
+                
+                <!-- Receipt Brand Header -->
+                <div class="d-flex justify-content-between align-items-start border-bottom border-light pb-4 mb-4">
+                    <div class="d-flex align-items-center gap-3">
+                        <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" style="width: 48px; height: 48px;">
+                            <rect x="6" y="24" width="34" height="24" rx="4" fill="#3B82F6"/>
+                            <path d="M40 28H48L56 36V48H40V28Z" fill="#60A5FA"/>
+                            <circle cx="16" cy="50" r="6" fill="#F8FAFC" stroke="#1E293B" stroke-width="3"/>
+                            <circle cx="48" cy="50" r="6" fill="#F8FAFC" stroke="#1E293B" stroke-width="3"/>
+                            <rect x="12" y="16" width="16" height="8" rx="2" fill="#2563EB"/>
+                        </svg>
+                        <div>
+                            <h3 class="fw-bold mb-0 text-dark">ParcelFleet</h3>
+                            <small class="text-muted text-uppercase fw-semibold" style="font-size: 0.65rem; letter-spacing: 0.5px;">Smart Courier & Fleet Management</small>
+                        </div>
+                    </div>
+                    <div class="text-end text-dark">
+                        <h4 class="fw-bold text-success mb-1">PROOF OF DELIVERY</h4>
+                        <div class="fw-semibold" style="font-size: 0.85rem;">Tracking ID: {{ parcel.tracking_id }}</div>
+                        <small class="text-muted">Delivered: {{ parcel.delivered_at.strftime('%Y-%m-%d %H:%M') if parcel.delivered_at else '--' }}</small>
+                    </div>
+                </div>
+                
+                <!-- Shipment Core Details Table -->
+                <div class="row g-4 mb-4">
+                    <div class="col-6 border-end border-light">
+                        <h6 class="fw-bold text-primary mb-2 uppercase" style="font-size: 0.75rem; letter-spacing: 0.5px;"><i class="fas fa-circle-arrow-up me-1"></i>Sender Information</h6>
+                        <div class="fw-bold text-dark mb-1">{{ parcel.sender_name }}</div>
+                        <div>Phone: {{ parcel.sender_phone }}</div>
+                        <div>Hub Node: <strong class="text-dark">{{ parcel.pickup_address }}</strong></div>
+                    </div>
+                    <div class="col-6">
+                        <h6 class="fw-bold text-primary mb-2 uppercase" style="font-size: 0.75rem; letter-spacing: 0.5px;"><i class="fas fa-circle-arrow-down me-1"></i>Receiver Information</h6>
+                        <div class="fw-bold text-dark mb-1">{{ parcel.receiver_name }}</div>
+                        <div>Phone: {{ parcel.receiver_phone }}</div>
+                        <div>Hub Node: <strong class="text-dark">{{ parcel.delivery_address }}</strong></div>
+                    </div>
+                </div>
+
+                <!-- Package Specs and Billing table -->
+                <h6 class="fw-bold text-primary mb-3 uppercase" style="font-size: 0.75rem; letter-spacing: 0.5px;"><i class="fas fa-box-open me-1"></i>Package & Billing Summary</h6>
+                <table class="table table-bordered align-middle mb-4" style="font-size: 0.85rem; border-color: var(--border-color);">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Specification</th>
+                            <th>Details</th>
+                            <th>Billing Item</th>
+                            <th>Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Category</strong></td>
+                            <td>{{ parcel.parcel_type }}</td>
+                            <td>Base Charge</td>
+                            <td>Rs. {{ parcel.delivery_charge }}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Weight (Actual / Volumetric)</strong></td>
+                            <td>{{ parcel.weight }} kg / {{ parcel.volumetric_weight | round(2) }} kg</td>
+                            <td>Payment Status</td>
+                            <td><span class="badge bg-success-subtle text-success border-0 rounded-pill">{{ parcel.payment_status }}</span></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Dimensions (LxWxH)</strong></td>
+                            <td>{{ parcel.length }}x{{ parcel.width }}x{{ parcel.height }} cm</td>
+                            <td><strong>Grand Total</strong></td>
+                            <td><strong>Rs. {{ parcel.delivery_charge }}</strong></td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <!-- Handoff Verification Photos Section -->
+                {% if parcel.pickup_image or parcel.delivery_image %}
+                <h6 class="fw-bold text-primary mb-3 uppercase" style="font-size: 0.75rem; letter-spacing: 0.5px;"><i class="fas fa-camera me-1"></i>Verification Photo Logs</h6>
+                <div class="row g-4 mb-4">
+                    {% if parcel.pickup_image %}
+                    <div class="col-6">
+                        <div class="text-muted mb-1" style="font-size: 0.75rem;">Condition Check at Pickup:</div>
+                        <div class="border rounded p-1 text-center bg-light">
+                            <img src="{{ url_for('uploaded_file', filename=parcel.pickup_image) }}" alt="Pickup Proof" class="img-fluid rounded" style="max-height: 180px; object-fit: contain;">
+                        </div>
+                    </div>
+                    {% endif %}
+                    {% if parcel.delivery_image %}
+                    <div class="col-6">
+                        <div class="text-muted mb-1" style="font-size: 0.75rem;">Handoff Verification at Destination:</div>
+                        <div class="border rounded p-1 text-center bg-light">
+                            <img src="{{ url_for('uploaded_file', filename=parcel.delivery_image) }}" alt="Delivery Proof" class="img-fluid rounded" style="max-height: 180px; object-fit: contain;">
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+                {% endif %}
+
+                <!-- Driver Logs and Signature Blocks -->
+                <div class="row g-4 border-top border-light pt-4 mt-1">
+                    <div class="col-6 border-end border-light">
+                        <h6 class="fw-bold text-primary mb-2 uppercase" style="font-size: 0.75rem; letter-spacing: 0.5px;"><i class="fas fa-motorcycle me-1"></i>Dispatch Driver Log</h6>
+                        <div class="fw-bold text-dark mb-1">{% if parcel.assigned_driver %}{{ parcel.assigned_driver.name }}{% else %}Unassigned{% endif %}</div>
+                        <div class="text-muted" style="font-size: 0.8rem;">
+                            Vehicle: {{ parcel.assigned_driver.vehicle_number if parcel.assigned_driver else '--' }}<br>
+                            Notes: {{ parcel.delivery_notes or 'Safe handoff completed successfully.' }}
+                        </div>
+                    </div>
+                    <div class="col-6 text-center">
+                        <h6 class="fw-bold text-primary mb-2 uppercase text-start" style="font-size: 0.75rem; letter-spacing: 0.5px;"><i class="fas fa-file-signature me-1"></i>Customer Signature Receipt</h6>
+                        {% if parcel.customer_signature %}
+                        <div class="border border-secondary border-opacity-10 rounded p-2 text-center bg-light" style="max-width: 240px; margin: 0 auto;">
+                            <img src="{{ parcel.customer_signature }}" alt="Recipient Signature" class="img-fluid" style="max-height: 80px; object-fit: contain;">
+                        </div>
+                        <small class="text-muted d-block mt-2">Digitally Signed at handoff point.</small>
+                        {% else %}
+                        <div class="text-muted py-4 border border-dashed rounded">No signature recorded.</div>
+                        {% endif %}
+                    </div>
+                </div>
+                
+                <div class="text-center text-muted border-top border-light pt-4 mt-4" style="font-size: 0.75rem;">
+                    This is an automatically generated system electronic invoice and proof of delivery. Thank you for choosing <strong>ParcelFleet</strong>!
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // JS trigger to download print POD voucher card as PDF using html2pdf
+    function downloadReceiptAsPDF() {
+        const element = document.getElementById('printable-receipt-area');
+        const opt = {
+            margin:       10,
+            filename:     'parcelfleet_receipt_{{ parcel.tracking_id }}.pdf',
+            image:        { type: 'jpeg', quality: 0.98 },
+            html2canvas:  { scale: 2, useCORS: true },
+            jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+        };
+        html2pdf().set(opt).from(element).save();
+    }
+</script>
+{% endblock %}

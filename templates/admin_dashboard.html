@@ -1,0 +1,316 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Console - ParcelFleet{% endblock %}
+{% block page_title %}Admin Dashboard{% endblock %}
+
+{% block content %}
+<!-- KPI METRIC CARDS GRID -->
+<div class="row row-cols-1 row-cols-sm-2 row-cols-xl-6 g-3 mb-4">
+    <!-- Card 1: Total Revenue -->
+    <div class="col">
+        <div class="kpi-card">
+            <div class="kpi-details">
+                <h6>Total Revenue</h6>
+                <h3 class="fw-bold">Rs. {{ stats.total_revenue }}</h3>
+                <div class="kpi-trend up"><i class="fas fa-caret-up"></i> +12% vs last week</div>
+            </div>
+            <div class="kpi-icon blue"><i class="fas fa-wallet"></i></div>
+        </div>
+    </div>
+    
+    <!-- Card 2: Today's Deliveries -->
+    <div class="col">
+        <div class="kpi-card">
+            <div class="kpi-details">
+                <h6>Today's Bookings</h6>
+                <h3 class="fw-bold">{{ stats.today_bookings }}</h3>
+                <div class="kpi-trend up"><i class="fas fa-caret-up"></i> +18% vs yesterday</div>
+            </div>
+            <div class="kpi-icon green"><i class="fas fa-cubes"></i></div>
+        </div>
+    </div>
+    
+    <!-- Card 3: Active Drivers -->
+    <div class="col">
+        <div class="kpi-card">
+            <div class="kpi-details">
+                <h6>Active Fleet</h6>
+                <h3 class="fw-bold">{{ stats.active_drivers }}</h3>
+                <div class="kpi-trend"><span class="badge bg-success-subtle text-success">85% Available</span></div>
+            </div>
+            <div class="kpi-icon purple"><i class="fas fa-motorcycle"></i></div>
+        </div>
+    </div>
+    
+    <!-- Card 4: Failed Deliveries -->
+    <div class="col">
+        <div class="kpi-card">
+            <div class="kpi-details">
+                <h6>Failed Attempts</h6>
+                <h3 class="fw-bold text-danger">{{ stats.failed_attempts }}</h3>
+                <div class="kpi-trend down"><i class="fas fa-caret-down"></i> -4.2% rate</div>
+            </div>
+            <div class="kpi-icon red"><i class="fas fa-exclamation-triangle"></i></div>
+        </div>
+    </div>
+    
+    <!-- Card 5: COD Pending -->
+    <div class="col">
+        <div class="kpi-card">
+            <div class="kpi-details">
+                <h6>COD Receivable</h6>
+                <h3 class="fw-bold text-warning">Rs. {{ stats.cod_pending }}</h3>
+                <div class="kpi-trend"><i class="fas fa-clock text-warning"></i> Collection active</div>
+            </div>
+            <div class="kpi-icon orange"><i class="fas fa-hand-holding-dollar"></i></div>
+        </div>
+    </div>
+    
+    <!-- Card 6: Average Transit Duration -->
+    <div class="col">
+        <div class="kpi-card">
+            <div class="kpi-details">
+                <h6>Avg Transit</h6>
+                <h3 class="fw-bold">{{ stats.avg_time }} Min</h3>
+                <div class="kpi-trend up"><i class="fas fa-bolt text-success"></i> Highly Optimized</div>
+            </div>
+            <div class="kpi-icon blue"><i class="fas fa-stopwatch"></i></div>
+        </div>
+    </div>
+</div>
+
+<!-- ACTIONS BAR -->
+<div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4 no-print">
+    <div class="d-flex align-items-center gap-2">
+        <h5 class="fw-bold text-dark mb-0">Operational Operations Hub</h5>
+        <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill">Seeded active</span>
+    </div>
+    <div class="d-flex align-items-center gap-2">
+        <!-- FCFS Dispatch Trigger Button -->
+        <form method="POST" action="{{ url_for('run_fcfs_dispatch') }}" class="mb-0">
+            <button type="submit" class="btn btn-primary rounded-pill px-4" style="background-color: var(--primary-color); border: none;">
+                <i class="fas fa-magic me-2"></i>Run FCFS Dispatch Queue
+            </button>
+        </form>
+        <button type="button" class="btn btn-outline-secondary rounded-pill px-3" data-bs-toggle="modal" data-bs-target="#futureScopeModal">
+            <i class="fas fa-graduation-cap me-2"></i>Project Documentation
+        </button>
+    </div>
+</div>
+
+<!-- CHARTS AND DRIVER LEADERBOARD SECTION -->
+<div class="row g-4 mb-4">
+    <!-- Chart 1: Status Breakdown -->
+    <div class="col-12 col-lg-4">
+        <div class="premium-card h-100 mb-0">
+            <div class="premium-card-title">
+                <span><i class="fas fa-chart-pie me-2 text-primary"></i>Parcel Status Matrix</span>
+                <span class="text-muted" style="font-size: 0.75rem;">Live counts</span>
+            </div>
+            <div style="position: relative; height: 260px;">
+                <canvas id="statusChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Chart 2: Monthly Trends -->
+    <div class="col-12 col-lg-4">
+        <div class="premium-card h-100 mb-0">
+            <div class="premium-card-title">
+                <span><i class="fas fa-chart-line me-2 text-primary"></i>Delivery Volume Trend</span>
+                <span class="text-muted" style="font-size: 0.75rem;">Monthly metrics</span>
+            </div>
+            <div style="position: relative; height: 260px;">
+                <canvas id="trendsChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Driver Leaderboard Rankings -->
+    <div class="col-12 col-lg-4">
+        <div class="premium-card h-100 mb-0">
+            <div class="premium-card-title">
+                <span><i class="fas fa-medal me-2 text-warning"></i>Driver Leaderboard</span>
+                <span class="badge bg-warning-subtle text-warning border-0 rounded-pill">Top Performers</span>
+            </div>
+            <div class="table-responsive" style="max-height: 260px; overflow-y: auto;">
+                <table class="table table-sm align-middle premium-table">
+                    <thead>
+                        <tr>
+                            <th>Rank</th>
+                            <th>Driver</th>
+                            <th>Completed</th>
+                            <th>Avg Min</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for driver in driver_rankings %}
+                        <tr>
+                            <td class="fw-bold text-center">
+                                {% if loop.index == 1 %}
+                                <i class="fas fa-crown text-warning"></i>
+                                {% elif loop.index == 2 %}
+                                <span class="text-secondary">2</span>
+                                {% else %}
+                                <span class="text-muted">{{ loop.index }}</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="fw-semibold">{{ driver.name }}</div>
+                                <small class="text-muted" style="font-size: 0.7rem;">{{ driver.vehicle_number }}</small>
+                            </td>
+                            <td class="fw-bold">{{ driver.completed_deliveries }}</td>
+                            <td>{{ driver.average_delivery_time | round(1) }}</td>
+                            <td>
+                                <span class="driver-badge {% if driver.availability == 'Available' %}badge-available{% elif driver.availability == 'On Delivery' %}badge-ondelivery{% elif driver.availability == 'On Break' %}badge-onbreak{% else %}badge-offline{% endif %}" style="font-size: 0.65rem; padding: 0.25em 0.5em;">
+                                    {{ driver.availability }}
+                                </span>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- RECENT ORDERS DATA TABLE -->
+<div class="premium-card">
+    <div class="premium-card-title">
+        <span><i class="fas fa-boxes-packing me-2 text-primary"></i>Recent Delivery Bookings</span>
+        <a href="{{ url_for('manage_parcels') }}" class="btn btn-sm btn-link text-decoration-none no-print">Manage All Parcels</a>
+    </div>
+    
+    <div class="table-responsive">
+        <table class="table premium-table">
+            <thead>
+                <tr>
+                    <th>Tracking ID</th>
+                    <th>Sender & Receiver</th>
+                    <th>Hub Route</th>
+                    <th>Specifications</th>
+                    <th>Pricing & Payment</th>
+                    <th>Courier Driver</th>
+                    <th>Delivery Status</th>
+                    <th class="no-print">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for p in recent_parcels %}
+                <tr data-status="{{ p.status }}" data-payment="{{ p.payment_status }}">
+                    <td>
+                        <a href="{{ url_for('live_tracking_view', tracking_id=p.tracking_id) }}" class="fw-bold text-primary text-decoration-none d-block">{{ p.tracking_id }}</a>
+                        <small class="text-muted">{{ p.created_at.strftime('%Y-%m-%d %H:%M') }}</small>
+                    </td>
+                    <td>
+                        <div class="fw-semibold"><i class="fas fa-paper-plane me-1 text-muted" style="width: 14px;"></i>{{ p.sender_name }}</div>
+                        <div class="text-muted"><i class="fas fa-user-tag me-1 text-muted" style="width: 14px;"></i>{{ p.receiver_name }}</div>
+                    </td>
+                    <td>
+                        <span class="d-block fw-semibold text-dark">{{ p.pickup_address }}</span>
+                        <small class="text-muted"><i class="fas fa-arrow-right me-1"></i>{{ p.delivery_address }}</small>
+                    </td>
+                    <td>
+                        <span class="badge bg-secondary-subtle text-dark border-0 rounded-pill" style="font-size: 0.7rem;">{{ p.parcel_type }}</span>
+                        <div class="text-muted" style="font-size: 0.75rem; margin-top: 2px;">{{ p.chargeable_weight | round(2) }} kg (Chargeable)</div>
+                    </td>
+                    <td>
+                        <div class="fw-semibold">Rs. {{ p.delivery_charge }}</div>
+                        <span class="badge bg-{% if p.payment_status == 'Paid' %}success-subtle text-success{% elif p.payment_status == 'COD' %}warning-subtle text-warning{% else %}danger-subtle text-danger{% endif %} border-0 rounded-pill" style="font-size: 0.65rem;">
+                            {{ p.payment_status }}
+                        </span>
+                    </td>
+                    <td>
+                        {% if p.assigned_driver %}
+                        <div class="fw-semibold">{{ p.assigned_driver.name }}</div>
+                        <small class="text-muted">{{ p.assigned_driver.phone }}</small>
+                        {% else %}
+                        <span class="text-danger fw-semibold" style="font-size: 0.8rem;"><i class="fas fa-user-slash me-1"></i>Unassigned</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="status-badge {% if p.status == 'Pending' %}badge-pending{% elif p.status == 'Assigned' %}badge-assigned{% elif p.status == 'Picked Up' %}badge-pickedup{% elif p.status == 'In Transit' %}badge-intransit{% elif p.status == 'Out For Delivery' %}badge-outfordelivery{% elif p.status == 'Delivered' %}badge-delivered{% else %}badge-cancelled{% endif %}">
+                            {{ p.status }}
+                        </span>
+                        {% if p.delivery_attempts > 0 %}
+                        <small class="d-block text-danger mt-1" style="font-size: 0.7rem;">(Attempts: {{ p.delivery_attempts }})</small>
+                        {% endif %}
+                    </td>
+                    <td class="no-print">
+                        <div class="d-flex gap-1">
+                            <a href="{{ url_for('print_shipping_label', id=p.id) }}" class="btn btn-sm btn-outline-secondary rounded-pill" title="Print Shipping Label"><i class="fas fa-print"></i></a>
+                            {% if p.status == 'Delivered' %}
+                            <a href="{{ url_for('view_proof_of_delivery', id=p.id) }}" class="btn btn-sm btn-outline-success rounded-pill" title="View Delivery Voucher"><i class="fas fa-file-invoice"></i></a>
+                            {% endif %}
+                            <a href="{{ url_for('live_tracking_view', tracking_id=p.tracking_id) }}" class="btn btn-sm btn-outline-primary rounded-pill" title="Track Live Route"><i class="fas fa-map-location-dot"></i></a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- FUTURE SCOPE PROJECT DOCUMENTATION MODAL -->
+<div class="modal fade" id="futureScopeModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content border-0 shadow-lg" style="border-radius: 16px; background-color: var(--card-bg);">
+            <div class="modal-header border-bottom border-light p-4">
+                <h5 class="modal-title fw-bold text-dark"><i class="fas fa-graduation-cap me-2 text-primary"></i>BCA Final Year Project: Future Scope & Roadmap</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4 text-dark" style="max-height: 500px; overflow-y: auto;">
+                <div class="alert alert-primary-subtle text-primary border-0 p-3 mb-4" style="border-radius: 12px;">
+                    <h6 class="fw-bold mb-1"><i class="fas fa-info-circle me-2"></i>BCA Final Year Defense Integration Note</h6>
+                    This full-stack implementation serves as a functional, commercial-ready core prototype. The items below outline the future development scopes ideal for project expansions, viva defenses, and software engineering planning documentation.
+                </div>
+                
+                <div class="row row-cols-1 row-cols-md-2 g-3 mb-4">
+                    <div class="col">
+                        <div class="p-3 border border-light h-100" style="border-radius: 12px; background-color: var(--bg-color);">
+                            <h6 class="fw-bold text-primary mb-2"><i class="fa-brands fa-android me-2"></i>Native Mobile Applications</h6>
+                            Development of Android and iOS mobile shells for drivers (real-time telemetry background services) and customers (push notifications and mobile map sweeps).
+                        </div>
+                    </div>
+                    <div class="col">
+                        <div class="p-3 border border-light h-100" style="border-radius: 12px; background-color: var(--bg-color);">
+                            <h6 class="fw-bold text-primary mb-2"><i class="fas fa-comment-sms me-2"></i>SMS & Email Notification APIs</h6>
+                            Integration with platforms like Twilio, Sparrow SMS, or SendGrid to broadcast SMS/Email alerts on status transitions (e.g. "OTP verification codes for delivery").
+                        </div>
+                    </div>
+                    <div class="col">
+                        <div class="p-3 border border-light h-100" style="border-radius: 12px; background-color: var(--bg-color);">
+                            <h6 class="fw-bold text-primary mb-2"><i class="fa-solid fa-map-location-dot me-2"></i>Google Maps API Suite</h6>
+                            Upgrading OpenStreetMap Leaflet layers to Google Maps Directions API to obtain visual road traffic arrays, commercial ETA estimations, and geocoding services.
+                        </div>
+                    </div>
+                    <div class="col">
+                        <div class="p-3 border border-light h-100" style="border-radius: 12px; background-color: var(--bg-color);">
+                            <h6 class="fw-bold text-primary mb-2"><i class="fas fa-microchip me-2"></i>Real GPS Tracker Hardware</h6>
+                            Configuring fleet telemetry matching with OBD-II physical GPS hardware trackers inside vehicles (e.g. Raspberry Pi or Arduino nodes transmitting MQTT messages).
+                        </div>
+                    </div>
+                    <div class="col">
+                        <div class="p-3 border border-light h-100" style="border-radius: 12px; background-color: var(--bg-color);">
+                            <h6 class="fw-bold text-primary mb-2"><i class="fas fa-robot me-2"></i>AI Route & Dispatch Optimization</h6>
+                            Applying Reinforcement Learning (RL) or advanced Genetic Algorithms to predict dispatch time bottlenecks based on vehicle type and historical valley road traffic records.
+                        </div>
+                    </div>
+                    <div class="col">
+                        <div class="p-3 border border-light h-100" style="border-radius: 12px; background-color: var(--bg-color);">
+                            <h6 class="fw-bold text-primary mb-2"><i class="fas fa-warehouse me-2"></i>Multi-Warehouse Inventory</h6>
+                            Building advanced stock sorting systems, enabling complex multi-warehouse sorting, parcel redistribution chains, and parcel weight checks on arrival.
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer border-top border-light p-3">
+                <button type="button" class="btn btn-secondary rounded-pill px-4" data-bs-dismiss="modal">Close Documentation</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

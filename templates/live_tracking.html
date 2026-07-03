@@ -1,0 +1,188 @@
+{% extends "base.html" %}
+
+{% block title %}Real-Time Tracker - ParcelFleet{% endblock %}
+{% block page_title %}Real-Time Shipment Tracking{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+    <!-- LEFT SIDE: PARCEL INFOS & CHRONOLOGICAL HISTORY -->
+    <div class="col-12 col-xl-4">
+        <!-- Telemetry Meters Card -->
+        <div class="premium-card mb-4 bg-primary text-white border-0 shadow-lg" style="background: linear-gradient(135deg, var(--primary-color) 0%, #1E40AF 100%) !important;">
+            <h5 class="fw-bold mb-3"><i class="fas fa-satellite-dish me-2 text-white"></i>Live Route Telemetry</h5>
+            
+            <div class="row g-3 mb-3">
+                <div class="col-4 border-end border-white border-opacity-10 text-center">
+                    <span class="d-block" style="font-size: 0.7rem; opacity: 0.7;">Estimated Arrival</span>
+                    <strong id="eta_minutes" style="font-size: 1.15rem;">-- Mins</strong>
+                </div>
+                <div class="col-4 border-end border-white border-opacity-10 text-center">
+                    <span class="d-block" style="font-size: 0.7rem; opacity: 0.7;">Distance Left</span>
+                    <strong id="distance_remaining" style="font-size: 1.15rem;">-- Km</strong>
+                </div>
+                <div class="col-4 text-center">
+                    <span class="d-block" style="font-size: 0.7rem; opacity: 0.7;">Current Speed</span>
+                    <strong id="current_speed" style="font-size: 1.15rem;">-- km/h</strong>
+                </div>
+            </div>
+
+            <!-- Progress Bar -->
+            <div class="progress-container bg-white bg-opacity-20 mb-2">
+                <div class="progress-fill bg-white" id="delivery_progress_fill" style="width: 0%;"></div>
+            </div>
+            <div class="d-flex justify-content-between align-items-center" style="font-size: 0.75rem;">
+                <span id="progress_percentage_text">0% Completed</span>
+                <span id="telemetry_status_text" class="fw-bold text-uppercase">Pending</span>
+            </div>
+        </div>
+
+        <!-- Parcel Details Card -->
+        <div class="premium-card mb-4">
+            <div class="premium-card-title mb-3">
+                <span><i class="fas fa-circle-info me-2 text-primary"></i>Shipment Invoice Details</span>
+                <span class="badge bg-secondary-subtle text-dark border-0 rounded-pill">{{ parcel.tracking_id }}</span>
+            </div>
+            
+            <div class="mb-3">
+                <span class="d-block text-muted" style="font-size: 0.7rem; uppercase">Sender</span>
+                <strong class="text-dark">{{ parcel.sender_name }}</strong>
+                <div class="text-muted" style="font-size: 0.8rem;"><i class="fas fa-phone me-1"></i>{{ parcel.sender_phone }} | Hub: {{ parcel.pickup_address }}</div>
+            </div>
+
+            <div class="mb-3">
+                <span class="d-block text-muted" style="font-size: 0.7rem; uppercase">Receiver</span>
+                <strong class="text-dark">{{ parcel.receiver_name }}</strong>
+                <div class="text-muted" style="font-size: 0.8rem;"><i class="fas fa-phone me-1"></i>{{ parcel.receiver_phone }} | Hub: {{ parcel.delivery_address }}</div>
+            </div>
+
+            <div class="mb-3">
+                <span class="d-block text-muted" style="font-size: 0.7rem; uppercase">Category / Price</span>
+                <span class="badge bg-secondary-subtle text-dark border-0 rounded-pill me-1" style="font-size: 0.7rem;">{{ parcel.parcel_type }}</span>
+                <strong class="text-dark">Rs. {{ parcel.delivery_charge }}</strong>
+                <span class="badge bg-{% if parcel.payment_status == 'Paid' %}success-subtle text-success{% else %}warning-subtle text-warning{% endif %} border-0 rounded-pill ms-2" style="font-size: 0.65rem;">
+                    {{ parcel.payment_status }}
+                </span>
+            </div>
+
+            <!-- Special Badges -->
+            {% if parcel.special_tags %}
+            <div class="d-flex flex-wrap gap-1 mt-2">
+                {% for tag in parcel.special_tags.split(',') %}
+                <span class="badge bg-light text-dark border border-secondary border-opacity-10 rounded" style="font-size: 0.65rem;">
+                    <i class="fas fa-shield-halved me-1 text-primary"></i>{{ tag.strip() }}
+                </span>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Routes & Road Conditions box -->
+        <div class="premium-card mb-4" style="max-height: 380px; overflow-y: auto;">
+            <!-- Select Alternative Route list -->
+            <div class="premium-card-title mb-2" style="font-size: 0.95rem;">
+                <span><i class="fas fa-route me-2 text-primary"></i>All Possible Routes</span>
+                <span class="badge bg-primary-subtle text-primary border-0 rounded-pill" style="font-size: 0.65rem;">Alternative Paths</span>
+            </div>
+            <div id="alternative_routes_list" class="mb-3">
+                <p class="text-muted mb-0" style="font-size: 0.8rem;"><i class="fas fa-spinner fa-spin me-2"></i>Loading possible routes...</p>
+            </div>
+
+            <!-- Route Conditions list -->
+            <div class="premium-card-title mb-2" style="font-size: 0.95rem; border-top: 1px solid #E2E8F0; padding-top: 12px; margin-top: 12px;">
+                <span><i class="fas fa-traffic-light me-2 text-primary"></i>Traffic & Road Conditions</span>
+                <span class="badge bg-info-subtle text-info border-0 rounded-pill" style="font-size: 0.65rem;">Selected Path</span>
+            </div>
+            <div id="route_segments_list">
+                <p class="text-muted mb-0" style="font-size: 0.8rem;"><i class="fas fa-spinner fa-spin me-2"></i>Loading route segments...</p>
+            </div>
+        </div>
+
+        <!-- Notification logs box -->
+        <div class="premium-card mb-4" style="max-height: 220px; overflow-y: auto;">
+            <div class="premium-card-title mb-2" style="font-size: 0.95rem;">
+                <span><i class="fas fa-history me-2 text-primary"></i>Customer Notification Broadcasts</span>
+                <span class="badge bg-primary-subtle text-primary border-0 rounded-pill" style="font-size: 0.65rem;">Simulated Alerts</span>
+            </div>
+            <div id="notification_alerts_feed">
+                <!-- Dynamically populated by JS interval -->
+            </div>
+        </div>
+
+
+        <!-- Shipment Timeline Status -->
+        <div class="premium-card mb-0">
+            <div class="premium-card-title mb-2">
+                <span><i class="fas fa-timeline me-2 text-primary"></i>Delivery Timeline Audit</span>
+            </div>
+            
+            <div class="tracking-timeline">
+                <div class="timeline-step" data-status-key="Pending">
+                    <div class="timeline-dot"><i class="fas fa-check"></i></div>
+                    <div class="timeline-content">
+                        <span class="timeline-title">Order Booked</span>
+                        <span class="timeline-meta">Awaiting dispatch matching</span>
+                    </div>
+                </div>
+                <div class="timeline-step" data-status-key="Assigned">
+                    <div class="timeline-dot"><i class="fas fa-check"></i></div>
+                    <div class="timeline-content">
+                        <span class="timeline-title">Courier Driver Assigned</span>
+                        <span class="timeline-meta">Driver is mapping route to pickup</span>
+                    </div>
+                </div>
+                <div class="timeline-step" data-status-key="Picked Up">
+                    <div class="timeline-dot"><i class="fas fa-check"></i></div>
+                    <div class="timeline-content">
+                        <span class="timeline-title">Picked Up</span>
+                        <span class="timeline-meta">Package verification complete</span>
+                    </div>
+                </div>
+                <div class="timeline-step" data-status-key="In Transit">
+                    <div class="timeline-dot"><i class="fas fa-check"></i></div>
+                    <div class="timeline-content">
+                        <span class="timeline-title">In Transit</span>
+                        <span class="timeline-meta">Simulated valley highway traversal</span>
+                    </div>
+                </div>
+                <div class="timeline-step" data-status-key="Out For Delivery">
+                    <div class="timeline-dot"><i class="fas fa-check"></i></div>
+                    <div class="timeline-content">
+                        <span class="timeline-title">Out for Delivery</span>
+                        <span class="timeline-meta">Driver traversing final hub connection</span>
+                    </div>
+                </div>
+                <div class="timeline-step" data-status-key="Delivered">
+                    <div class="timeline-dot"><i class="fas fa-check"></i></div>
+                    <div class="timeline-content">
+                        <span class="timeline-title">Delivered</span>
+                        <span class="timeline-meta">Recipient signature & POD secure</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- RIGHT SIDE: FULL SATELITTE ROUTE MAP -->
+    <div class="col-12 col-xl-8">
+        <div class="premium-card h-100 p-0 overflow-hidden mb-0" style="min-height: 520px; position: relative;">
+            <!-- Floating Map Legend -->
+            <div class="p-3 m-0 bg-transparent border-bottom border-light no-print" style="position: absolute; top: 0; left: 0; right: 0; z-index: 1000; background-color: rgba(255, 255, 255, 0.95) !important; backdrop-filter: blur(8px);">
+                <div class="d-flex align-items-center justify-content-between">
+                    <span><i class="fas fa-route me-2 text-primary"></i>Dijkstra Route & GPS Satellite Tracking</span>
+                    <div class="d-flex align-items-center gap-3" style="font-size: 0.75rem;">
+                        <span class="d-flex align-items-center gap-1"><span class="badge rounded-circle p-1 bg-warning" style="width: 8px; height: 8px; display: inline-block;"></span> Pickup</span>
+                        <span class="d-flex align-items-center gap-1"><span class="badge rounded-circle p-1 bg-success" style="width: 8px; height: 8px; display: inline-block;"></span> Delivery</span>
+                        <span class="d-flex align-items-center gap-1"><span class="badge rounded-circle p-1 bg-primary" style="width: 8px; height: 8px; display: inline-block;"></span> Driver</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div id="trackingMap" style="width: 100%; height: 640px;" data-tracking-id="{{ parcel.tracking_id }}"></div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/tracking.js') }}"></script>
+{% endblock %}

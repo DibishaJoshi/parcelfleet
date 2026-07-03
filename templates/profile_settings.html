@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+
+{% block title %}Profile Settings - ParcelFleet{% endblock %}
+{% block page_title %}Account Settings{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+    <!-- LEFT PANEL: USER AVATAR & METRICS SUMMARY -->
+    <div class="col-12 col-lg-4">
+        <div class="premium-card text-center p-4">
+            <!-- Large User Initial Avatar -->
+            <div class="bg-primary text-white rounded-circle d-flex align-items-center justify-content-center fw-bold mx-auto mb-3" style="width: 90px; height: 90px; font-size: 2.5rem; box-shadow: 0 8px 16px rgba(37,99,235,0.2);">
+                {{ current_user.username[0].upper() }}
+            </div>
+            
+            <h5 class="fw-bold text-dark mb-1">{{ current_user.username }}</h5>
+            <span class="badge bg-primary-subtle text-primary border-0 rounded-pill px-3 py-1.5 mb-3" style="font-size: 0.8rem;">
+                <i class="fas fa-shield-halved me-1"></i>{{ current_user.role | upper }} Account
+            </span>
+            
+            {% if current_user.role == 'driver' and current_user.driver_profile %}
+            {% set d = current_user.driver_profile %}
+            <div class="pt-3 border-top border-light text-start text-dark" style="font-size: 0.85rem;">
+                <div class="mb-2">
+                    <span class="text-muted d-block" style="font-size: 0.75rem;">Vehicle plate number</span>
+                    <strong><i class="fas fa-motorcycle me-2 text-primary"></i>{{ d.vehicle_number }}</strong>
+                </div>
+                <div class="mb-2">
+                    <span class="text-muted d-block" style="font-size: 0.75rem;">Registered Mobile Phone</span>
+                    <strong><i class="fas fa-phone me-2 text-primary"></i>{{ d.phone }}</strong>
+                </div>
+                {% if d.email %}
+                <div class="mb-3">
+                    <span class="text-muted d-block" style="font-size: 0.75rem;">Registered Email</span>
+                    <strong><i class="fas fa-envelope me-2 text-primary"></i>{{ d.email }}</strong>
+                </div>
+                {% endif %}
+                
+                <div class="p-3 bg-light rounded-3 d-flex justify-content-between align-items-center">
+                    <div>
+                        <span class="text-muted d-block" style="font-size: 0.7rem;">Completed Deliveries</span>
+                        <strong class="fs-5">{{ d.completed_deliveries }}</strong>
+                    </div>
+                    <div class="text-end">
+                        <span class="text-muted d-block" style="font-size: 0.7rem;">Average Transit Time</span>
+                        <strong class="fs-5">{{ d.average_delivery_time | round(1) }} Min</strong>
+                    </div>
+                </div>
+            </div>
+            {% else %}
+            <div class="pt-3 border-top border-light text-muted" style="font-size: 0.85rem;">
+                <p class="mb-0">Administrative management permissions enabled. You can coordinate orders, manage fleet rosters, and review routing analytics.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    
+    <!-- RIGHT PANEL: INTERACTIVE CONFIGURATION FORM -->
+    <div class="col-12 col-lg-8">
+        <div class="premium-card p-4 text-dark">
+            <form method="POST" action="{{ url_for('profile_settings') }}">
+                
+                <!-- Section 1: Login Credentials -->
+                <h5 class="fw-bold text-primary mb-3"><i class="fas fa-key me-2"></i>Sign In Credentials</h5>
+                
+                <div class="row g-3 mb-4">
+                    <div class="col-12">
+                        <label for="username" class="form-label fw-semibold">Login Username</label>
+                        <input type="text" class="form-control" name="username" id="username" value="{{ current_user.username }}" required>
+                    </div>
+                    
+                    <div class="col-12 col-md-4">
+                        <label for="current_password" class="form-label fw-semibold">Current Password</label>
+                        <input type="password" class="form-control" name="current_password" id="current_password" placeholder="••••••••">
+                    </div>
+                    <div class="col-12 col-md-4">
+                        <label for="new_password" class="form-label fw-semibold">New Password</label>
+                        <input type="password" class="form-control" name="new_password" id="new_password" placeholder="New password">
+                    </div>
+                    <div class="col-12 col-md-4">
+                        <label for="confirm_password" class="form-label fw-semibold">Confirm New Password</label>
+                        <input type="password" class="form-control" name="confirm_password" id="confirm_password" placeholder="Confirm password">
+                    </div>
+                    <div class="col-12">
+                        <small class="text-muted"><i class="fas fa-circle-info me-1"></i>Leave password fields blank if you do not wish to update your sign-in password.</small>
+                    </div>
+                </div>
+                
+                <!-- Section 2: Driver Contact Details (Conditional) -->
+                {% if current_user.role == 'driver' and current_user.driver_profile %}
+                {% set d = current_user.driver_profile %}
+                <hr class="my-4 border-light">
+                <h5 class="fw-bold text-primary mb-3"><i class="fas fa-id-card me-2"></i>Courier Profile Details</h5>
+                
+                <div class="row g-3 mb-4">
+                    <div class="col-12 col-md-6">
+                        <label for="driver_name" class="form-label fw-semibold">Courier Full Name *</label>
+                        <input type="text" class="form-control" name="driver_name" id="driver_name" value="{{ d.name }}" required>
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <label for="vehicle_number" class="form-label fw-semibold">Vehicle Plate Number *</label>
+                        <input type="text" class="form-control" name="vehicle_number" id="vehicle_number" value="{{ d.vehicle_number }}" required>
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <label for="driver_phone" class="form-label fw-semibold">Contact Mobile Phone *</label>
+                        <input type="text" class="form-control" name="driver_phone" id="driver_phone" value="{{ d.phone }}" pattern="9[678]\d{8}" title="Must be a 10-digit Nepali mobile number starting with 98, 97, or 96." required>
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <label for="driver_email" class="form-label fw-semibold">Registered Email Address</label>
+                        <input type="email" class="form-control" name="driver_email" id="driver_email" value="{{ d.email or '' }}" placeholder="driver@parcelfleet.com">
+                    </div>
+                </div>
+                {% endif %}
+                
+                <!-- Form Submission Footer -->
+                <div class="d-flex justify-content-end gap-2 border-top border-light pt-3">
+                    <a href="{% if current_user.role == 'admin' %}{{ url_for('admin_dashboard') }}{% else %}{{ url_for('driver_dashboard') }}{% endif %}" class="btn btn-secondary rounded-pill px-4">Cancel</a>
+                    <button type="submit" class="btn btn-primary rounded-pill px-4" style="background-color: var(--primary-color); border: none;">Save Profile Settings</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+
+{% block title %}Shipping Voucher - {{ parcel.tracking_id }}{% endblock %}
+
+{% block extra_head %}
+<style>
+    /* Reset margins for printing label */
+    body {
+        background-color: var(--bg-color);
+    }
+    
+    .sidebar, .header-bar {
+        display: none !important;
+    }
+    
+    .main-viewport, .main-content {
+        padding: 0 !important;
+        margin: 0 !important;
+        background-color: transparent !important;
+    }
+</style>
+{% endblock %}
+
+{% block full_content %}
+<div class="container py-4 text-dark">
+    <!-- Top Action bar (Not printable) -->
+    <div class="row justify-content-center mb-4 no-print">
+        <div class="col-12 col-md-8 col-lg-6 d-flex align-items-center justify-content-between">
+            <a href="{{ url_for('manage_parcels') }}" class="btn btn-outline-secondary rounded-pill px-3">
+                <i class="fas fa-arrow-left me-2"></i>Back to Parcels
+            </a>
+            
+            <div class="d-flex gap-2">
+                <button class="btn btn-outline-primary rounded-pill px-3" onclick="downloadLabelAsPDF()">
+                    <i class="fas fa-file-pdf me-2"></i>Download PDF Label
+                </button>
+                <button class="btn btn-primary rounded-pill px-4" onclick="window.print()" style="background-color: var(--primary-color); border: none;">
+                    <i class="fas fa-print me-2"></i>Print Thermal Label
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- THERMAL A6 SHIPPING LABEL CARD -->
+    <div class="row justify-content-center">
+        <div class="col-12" id="printable-label-area">
+            <div class="thermal-label-container shadow-sm bg-white">
+                <!-- Label Header -->
+                <div class="thermal-label-header">
+                    <h5>ParcelFleet</h5>
+                    <small style="font-size: 7.5pt; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Smart Courier & Fleet Management System</small>
+                </div>
+                
+                <!-- Barcode & QR Code Section -->
+                <div class="thermal-label-barcodes">
+                    <div class="barcode-svg text-center">
+                        <img src="{{ url_for('generate_barcode_api', tracking_id=parcel.tracking_id) }}" alt="Barcode" style="width: 60mm; height: 18mm;">
+                        <div class="fw-bold mt-1 text-center" style="font-size: 9pt; letter-spacing: 2px;">{{ parcel.tracking_id }}</div>
+                    </div>
+                    <div class="qrcode-img">
+                        <img src="{{ url_for('generate_qrcode_api', tracking_id=parcel.tracking_id) }}" alt="QR Code">
+                    </div>
+                </div>
+                
+                <!-- Address Blocks -->
+                <!-- From Sender -->
+                <div class="thermal-address-block">
+                    <div class="thermal-address-title"><i class="fas fa-circle-arrow-up me-1"></i>FROM (Sender):</div>
+                    <div class="thermal-address-name">{{ parcel.sender_name }}</div>
+                    <div>Phone: {{ parcel.sender_phone }}</div>
+                    <div class="fw-semibold">Hub: {{ parcel.pickup_address }} (Kathmandu Valley)</div>
+                </div>
+                
+                <!-- To Receiver -->
+                <div class="thermal-address-block to">
+                    <div class="thermal-address-title"><i class="fas fa-circle-arrow-down me-1"></i>TO (Receiver):</div>
+                    <div class="thermal-address-name">{{ parcel.receiver_name }}</div>
+                    <div>Phone: {{ parcel.receiver_phone }}</div>
+                    <div class="fw-semibold">Hub: {{ parcel.delivery_address }} (Kathmandu Valley)</div>
+                </div>
+                
+                <!-- Spec Grid -->
+                <div class="thermal-meta-grid">
+                    <div class="thermal-meta-item">
+                        <span class="thermal-meta-label">Category</span>
+                        <span class="thermal-meta-value">{{ parcel.parcel_type }}</span>
+                    </div>
+                    <div class="thermal-meta-item">
+                        <span class="thermal-meta-label">Chargeable Wt.</span>
+                        <span class="thermal-meta-value">{{ parcel.chargeable_weight | round(2) }} Kg</span>
+                    </div>
+                    <div class="thermal-meta-item">
+                        <span class="thermal-meta-label">Delivery Charge</span>
+                        <span class="thermal-meta-value">Rs. {{ parcel.delivery_charge }}</span>
+                    </div>
+                    <div class="thermal-meta-item">
+                        <span class="thermal-meta-label">Payment Status</span>
+                        <span class="thermal-meta-value">{{ parcel.payment_status }}</span>
+                    </div>
+                </div>
+
+                <!-- Driver and Status Grid -->
+                <div class="thermal-meta-grid" style="border-bottom: none; margin-bottom: 2mm;">
+                    <div class="thermal-meta-item">
+                        <span class="thermal-meta-label">Assigned Driver</span>
+                        <span class="thermal-meta-value">{% if parcel.assigned_driver %}{{ parcel.assigned_driver.name }}{% else %}Unassigned{% endif %}</span>
+                    </div>
+                    <div class="thermal-meta-item">
+                        <span class="thermal-meta-label">Current Status</span>
+                        <span class="thermal-meta-value text-uppercase">{{ parcel.status }}</span>
+                    </div>
+                </div>
+
+                <!-- Handling Badges Section -->
+                {% if parcel.special_tags %}
+                <div class="thermal-badges-wrapper">
+                    {% for tag in parcel.special_tags.split(',') %}
+                    <span class="thermal-label-badge"><i class="fas fa-shield-halved me-1"></i>{{ tag.strip() }}</span>
+                    {% endfor %}
+                </div>
+                {% endif %}
+                
+                <div class="text-center pt-2 border-top border-dark border-opacity-10" style="font-size: 7.5pt; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px;">
+                    Scan QR Code to Track Package Live
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // JS trigger to download print A6 card as PDF voucher using html2pdf
+    function downloadLabelAsPDF() {
+        const element = document.getElementById('printable-label-area');
+        const opt = {
+            margin:       0,
+            filename:     'parcelfleet_label_{{ parcel.tracking_id }}.pdf',
+            image:        { type: 'jpeg', quality: 0.98 },
+            html2canvas:  { scale: 2, useCORS: true },
+            jsPDF:        { unit: 'mm', format: 'a6', orientation: 'portrait' }
+        };
+        html2pdf().set(opt).from(element).save();
+    }
+</script>
+{% endblock %}

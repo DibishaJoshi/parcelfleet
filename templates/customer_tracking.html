@@ -1,0 +1,245 @@
+{% extends "base.html" %}
+
+{% block title %}Track Shipment - ParcelFleet{% endblock %}
+
+{% block full_content %}
+<div class="no-layout-container" style="background-color: var(--bg-color); min-height: 100vh;">
+    <!-- Universal top bar for anonymous customers -->
+    <header class="header-bar px-4 py-2 border-bottom border-light no-print">
+        <div class="d-flex align-items-center gap-3">
+            <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" style="width: 36px; height: 36px;">
+                <rect x="6" y="24" width="34" height="24" rx="4" fill="#3B82F6"/>
+                <path d="M40 28H48L56 36V48H40V28Z" fill="#60A5FA"/>
+                <circle cx="16" cy="50" r="6" fill="#F8FAFC" stroke="#1E293B" stroke-width="3"/>
+                <circle cx="48" cy="50" r="6" fill="#F8FAFC" stroke="#1E293B" stroke-width="3"/>
+                <rect x="12" y="16" width="16" height="8" rx="2" fill="#2563EB"/>
+            </svg>
+            <h4 class="mb-0 text-dark fw-bold">ParcelFleet</h4>
+        </div>
+        <div class="d-flex gap-2">
+            <!-- Theme Toggle Button -->
+            <button class="theme-toggle-btn me-2" onclick="toggleThemeMode()">
+                <i class="fa-solid fa-moon" id="themeIcon"></i>
+            </button>
+            <a href="{{ url_for('login') }}" class="btn btn-primary rounded-pill px-4" style="background-color: var(--primary-color); border: none;">
+                <i class="fas fa-right-to-bracket me-2"></i>Agent Sign In
+            </a>
+        </div>
+    </header>
+
+    <div class="container py-5 text-dark">
+        <!-- SEARCH BAR CONTAINER -->
+        <div class="row justify-content-center mb-5 no-print">
+            <div class="col-12 col-md-8 col-lg-6 text-center">
+                <h1 class="fw-extrabold text-dark mb-2" style="font-family: 'Poppins', sans-serif;">Track Your Shipment</h1>
+                <p class="text-muted mb-4">Enter your automatically generated unique tracking ID to view live progress, ETAs, and driver routes across Kathmandu.</p>
+                
+                <form method="GET" action="{{ url_for('customer_tracking_view') }}" class="mb-0">
+                    <div class="input-group input-group-lg shadow-sm border border-light" style="border-radius: 50rem; overflow: hidden; background-color: var(--card-bg);">
+                        <span class="input-group-text border-0 bg-transparent text-muted"><i class="fas fa-magnifying-glass"></i></span>
+                        <input type="text" class="form-control border-0 ps-0" name="tracking_id" value="{{ tracking_id or '' }}" placeholder="Enter Tracking ID (e.g. PF20261001)" required style="font-size: 1rem; box-shadow: none;">
+                        <button type="submit" class="btn btn-primary px-4 fw-bold" style="background-color: var(--primary-color); border: none; font-size: 0.95rem; border-radius: 50rem;">
+                            Track Parcel
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        {% if error %}
+        <div class="row justify-content-center no-print">
+            <div class="col-12 col-md-6 text-center">
+                <div class="alert alert-danger border-0 p-4 shadow-sm" style="border-radius: 16px;">
+                    <i class="fas fa-circle-exclamation text-danger mb-3" style="font-size: 2.5rem;"></i>
+                    <h5 class="fw-bold">Parcel Not Found</h5>
+                    <p class="text-muted mb-0">The tracking ID you entered does not match any record in our logistics database. Please verify and try again.</p>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- DYNAMIC RESULTS VIEW -->
+        {% if parcel %}
+        <div class="row g-4">
+            <!-- Left Info Pane -->
+            <div class="col-12 col-lg-4">
+                <!-- Progress Percentage Indicator -->
+                <div class="premium-card bg-primary text-white border-0 shadow-lg mb-4" style="background: linear-gradient(135deg, var(--primary-color) 0%, #1E40AF 100%) !important;">
+                    <h5 class="fw-bold mb-3"><i class="fas fa-satellite-dish me-2 text-white"></i>Simulated GPS Telemetry</h5>
+                    
+                    <div class="row g-3 mb-3 text-center">
+                        <div class="col-4 border-end border-white border-opacity-10">
+                            <span class="d-block" style="font-size: 0.7rem; opacity: 0.7;">ETA</span>
+                            <strong id="eta_minutes" style="font-size: 1.15rem;">-- Mins</strong>
+                        </div>
+                        <div class="col-4 border-end border-white border-opacity-10">
+                            <span class="d-block" style="font-size: 0.7rem; opacity: 0.7;">Distance</span>
+                            <strong id="distance_remaining" style="font-size: 1.15rem;">-- Km</strong>
+                        </div>
+                        <div class="col-4">
+                            <span class="d-block" style="font-size: 0.7rem; opacity: 0.7;">Telemetry</span>
+                            <strong id="current_speed" style="font-size: 1.15rem;">-- km/h</strong>
+                        </div>
+                    </div>
+
+                    <div class="progress-container bg-white bg-opacity-20 mb-2">
+                        <div class="progress-fill bg-white" id="delivery_progress_fill" style="width: 0%;"></div>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center" style="font-size: 0.75rem;">
+                        <span id="progress_percentage_text">0% Completed</span>
+                        <span id="telemetry_status_text" class="fw-bold text-uppercase">{{ parcel.status }}</span>
+                    </div>
+                </div>
+
+                <!-- Parcel Summary Card -->
+                <div class="premium-card mb-4">
+                    <div class="premium-card-title mb-3">
+                        <span><i class="fas fa-box-open me-2 text-primary"></i>Shipment Summary</span>
+                        <span class="badge bg-secondary-subtle text-dark border-0 rounded-pill">{{ parcel.tracking_id }}</span>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <span class="d-block text-muted" style="font-size: 0.7rem;">Pickup Hub Node</span>
+                        <strong class="text-dark">{{ parcel.pickup_address }}</strong>
+                    </div>
+
+                    <div class="mb-3">
+                        <span class="d-block text-muted" style="font-size: 0.7rem;">Delivery Hub Node</span>
+                        <strong class="text-dark">{{ parcel.delivery_address }}</strong>
+                    </div>
+
+                    <div class="row g-2 mb-3" style="font-size: 0.85rem;">
+                        <div class="col-6">
+                            <span class="d-block text-muted" style="font-size: 0.7rem;">Category</span>
+                            <strong class="text-dark">{{ parcel.parcel_type }}</strong>
+                        </div>
+                        <div class="col-6">
+                            <span class="d-block text-muted" style="font-size: 0.7rem;">Chargeable Weight</span>
+                            <strong class="text-dark">{{ parcel.chargeable_weight | round(2) }} Kg</strong>
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-between align-items-center border-top border-light pt-2" style="font-size: 0.85rem;">
+                        <span>
+                            Charge: <strong>Rs. {{ parcel.delivery_charge }}</strong>
+                            <span class="badge bg-{% if parcel.payment_status == 'Paid' %}success-subtle text-success{% else %}warning-subtle text-warning{% endif %} border-0 rounded-pill ms-1" style="font-size: 0.65rem;">
+                                {{ parcel.payment_status }}
+                            </span>
+                        </span>
+                        
+                        {% if parcel.status == 'Delivered' %}
+                        <a href="{{ url_for('view_proof_of_delivery', id=parcel.id) }}" class="btn btn-sm btn-outline-success rounded-pill px-3"><i class="fas fa-file-invoice me-1"></i>Voucher / POD</a>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Routes & Road Conditions box -->
+                <div class="premium-card mb-4" style="max-height: 380px; overflow-y: auto;">
+                    <!-- Select Alternative Route list -->
+                    <div class="premium-card-title mb-2" style="font-size: 0.95rem;">
+                        <span><i class="fas fa-route me-2 text-primary"></i>All Possible Routes</span>
+                        <span class="badge bg-primary-subtle text-primary border-0 rounded-pill" style="font-size: 0.65rem;">Alternative Paths</span>
+                    </div>
+                    <div id="alternative_routes_list" class="mb-3">
+                        <p class="text-muted mb-0" style="font-size: 0.8rem;"><i class="fas fa-spinner fa-spin me-2"></i>Loading possible routes...</p>
+                    </div>
+
+                    <!-- Route Conditions list -->
+                    <div class="premium-card-title mb-2" style="font-size: 0.95rem; border-top: 1px solid #E2E8F0; padding-top: 12px; margin-top: 12px;">
+                        <span><i class="fas fa-traffic-light me-2 text-primary"></i>Traffic & Road Conditions</span>
+                        <span class="badge bg-info-subtle text-info border-0 rounded-pill" style="font-size: 0.65rem;">Selected Path</span>
+                    </div>
+                    <div id="route_segments_list">
+                        <p class="text-muted mb-0" style="font-size: 0.8rem;"><i class="fas fa-spinner fa-spin me-2"></i>Loading route segments...</p>
+                    </div>
+                </div>
+
+                <!-- Simulated Notifications feed -->
+                <div class="premium-card mb-4" style="max-height: 200px; overflow-y: auto;">
+                    <div class="premium-card-title mb-2" style="font-size: 0.95rem;">
+                        <span><i class="fas fa-message me-2 text-primary"></i>Simulated Notifications Logs</span>
+                    </div>
+                    <div id="notification_alerts_feed">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+
+
+                <!-- Timeline Audit -->
+                <div class="premium-card mb-0">
+                    <div class="premium-card-title mb-2">
+                        <span><i class="fas fa-timeline me-2 text-primary"></i>Handoff Timeline</span>
+                    </div>
+                    
+                    <div class="tracking-timeline">
+                        <div class="timeline-step" data-status-key="Pending">
+                            <div class="timeline-dot"><i class="fas fa-check"></i></div>
+                            <div class="timeline-content">
+                                <span class="timeline-title">Order Booked</span>
+                                <span class="timeline-meta">Awaiting driver assignment</span>
+                            </div>
+                        </div>
+                        <div class="timeline-step" data-status-key="Assigned">
+                            <div class="timeline-dot"><i class="fas fa-check"></i></div>
+                            <div class="timeline-content">
+                                <span class="timeline-title">Driver Dispatched</span>
+                                <span class="timeline-meta">Nearest driver traveling to pickup</span>
+                            </div>
+                        </div>
+                        <div class="timeline-step" data-status-key="Picked Up">
+                            <div class="timeline-dot"><i class="fas fa-check"></i></div>
+                            <div class="timeline-content">
+                                <span class="timeline-title">Picked Up</span>
+                                <span class="timeline-meta">Package verification complete</span>
+                            </div>
+                        </div>
+                        <div class="timeline-step" data-status-key="In Transit">
+                            <div class="timeline-dot"><i class="fas fa-check"></i></div>
+                            <div class="timeline-content">
+                                <span class="timeline-title">In Transit</span>
+                                <span class="timeline-meta">Simulated valley traversal</span>
+                            </div>
+                        </div>
+                        <div class="timeline-step" data-status-key="Out For Delivery">
+                            <div class="timeline-dot"><i class="fas fa-check"></i></div>
+                            <div class="timeline-content">
+                                <span class="timeline-title">Out for Delivery</span>
+                                <span class="timeline-meta">Driver traversing final hub connection</span>
+                            </div>
+                        </div>
+                        <div class="timeline-step" data-status-key="Delivered">
+                            <div class="timeline-dot"><i class="fas fa-check"></i></div>
+                            <div class="timeline-content">
+                                <span class="timeline-title">Delivered</span>
+                                <span class="timeline-meta">Signature secured at destination</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Map Pane -->
+            <div class="col-12 col-lg-8">
+                <div class="premium-card h-100 p-0 overflow-hidden mb-0" style="min-height: 520px; position: relative;">
+                    <!-- Floating Map Header -->
+                    <div class="p-3 m-0 bg-transparent border-bottom border-light no-print" style="position: absolute; top: 0; left: 0; right: 0; z-index: 1000; background-color: rgba(255, 255, 255, 0.95) !important; backdrop-filter: blur(8px);">
+                        <div class="d-flex align-items-center justify-content-between">
+                            <span><i class="fas fa-route me-2 text-primary"></i>Real-Time Delivery Satellite Tracking</span>
+                            <span class="badge bg-success-subtle text-success border-0 rounded-pill">Refreshes every 10s</span>
+                        </div>
+                    </div>
+                    
+                    <div id="trackingMap" style="width: 100%; height: 600px;" data-tracking-id="{{ parcel.tracking_id }}"></div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{% if parcel %}
+<script src="{{ url_for('static', filename='js/tracking.js') }}"></script>
+{% endif %}
+{% endblock %}

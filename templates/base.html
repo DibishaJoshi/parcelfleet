@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}ParcelFleet{% endblock %} - Smart Courier & Fleet Management</title>
+    
+    <!-- Google Fonts (Poppins & Inter) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <!-- FontAwesome v6 -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" rel="stylesheet">
+    
+    <!-- Leaflet.js Map CSS & JS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <!-- html2pdf.js for exporting PDF vouchers -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+    {% if current_user.is_authenticated and not no_layout %}
+    <div class="app-container">
+        <!-- SIDEBAR NAVIGATION -->
+        <aside class="sidebar" id="sidebar">
+            <div class="brand">
+                <!-- Cargo Truck SVG Logo -->
+                <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <rect x="6" y="24" width="34" height="24" rx="4" fill="#3B82F6"/>
+                    <path d="M40 28H48L56 36V48H40V28Z" fill="#60A5FA"/>
+                    <circle cx="16" cy="50" r="6" fill="#F8FAFC" stroke="#1E293B" stroke-width="3"/>
+                    <circle cx="48" cy="50" r="6" fill="#F8FAFC" stroke="#1E293B" stroke-width="3"/>
+                    <rect x="12" y="16" width="16" height="8" rx="2" fill="#2563EB"/>
+                </svg>
+                <span>ParcelFleet</span>
+            </div>
+            
+            <ul class="sidebar-nav">
+                {% if current_user.role == 'admin' %}
+                <li class="sidebar-nav-item {% if active_page == 'dashboard' %}active{% endif %}">
+                    <a href="{{ url_for('admin_dashboard') }}">
+                        <i class="fa-solid fa-chart-line"></i>
+                        <span>Dashboard</span>
+                    </a>
+                </li>
+                <li class="sidebar-nav-item {% if active_page == 'parcels' %}active{% endif %}">
+                    <a href="{{ url_for('manage_parcels') }}">
+                        <i class="fa-solid fa-box-open"></i>
+                        <span>Parcels</span>
+                    </a>
+                </li>
+                <li class="sidebar-nav-item {% if active_page == 'drivers' %}active{% endif %}">
+                    <a href="{{ url_for('manage_drivers') }}">
+                        <i class="fa-solid fa-motorcycle"></i>
+                        <span>Drivers / Fleet</span>
+                    </a>
+                </li>
+                {% elif current_user.role == 'driver' %}
+                <li class="sidebar-nav-item {% if active_page == 'driver_dashboard' %}active{% endif %}">
+                    <a href="{{ url_for('driver_dashboard') }}">
+                        <i class="fa-solid fa-route"></i>
+                        <span>My Deliveries</span>
+                    </a>
+                </li>
+                {% endif %}
+            </ul>
+            
+            <div class="sidebar-footer border-top border-secondary pt-3 mt-auto">
+                <a href="{{ url_for('logout') }}" class="d-flex align-items-center gap-3 text-decoration-none text-danger" style="padding: 0.5rem 1rem;">
+                    <i class="fa-solid fa-right-from-bracket"></i>
+                    <span>Log Out</span>
+                </a>
+            </div>
+        </aside>
+
+        <!-- VIEWPORT WORKSPACE -->
+        <main class="main-viewport">
+            <header class="header-bar">
+                <div class="d-flex align-items-center gap-3">
+                    <button class="toggle-sidebar" id="toggleSidebar">
+                        <i class="fa-solid fa-bars"></i>
+                    </button>
+                    <h4 class="mb-0 text-capitalize text-dark fw-bold">{% block page_title %}{{ active_page }}{% endblock %}</h4>
+                </div>
+                
+                <div class="header-actions">
+                    <!-- Dark Mode Toggle Button -->
+                    <button class="theme-toggle-btn" id="themeToggle" onclick="toggleThemeMode()">
+                        <i class="fa-solid fa-moon" id="themeIcon"></i>
+                    </button>
+                    
+                    <!-- Notification Bell popover placeholder -->
+                    <div class="dropdown no-print">
+                        <button class="theme-toggle-btn position-relative" data-bs-toggle="dropdown">
+                            <i class="fa-solid fa-bell"></i>
+                            <span class="position-absolute top-0 start-100 translate-middle p-1 bg-danger border border-light rounded-circle"></span>
+                        </button>
+                        <div class="dropdown-menu dropdown-menu-end p-3 shadow border-0" style="width: 280px; border-radius: 12px; background-color: var(--card-bg);">
+                            <h6 class="fw-bold mb-2 border-bottom pb-2 text-dark">Recent Notifications</h6>
+                            <div style="max-height: 200px; overflow-y: auto; font-size: 0.85rem;" id="header_notif_list">
+                                <p class="text-muted mb-0 py-2"><i class="fas fa-check-circle text-success me-2"></i>System seeded successfully.</p>
+                                <p class="text-muted mb-0 py-2"><i class="fas fa-info-circle text-primary me-2"></i>Fleet simulation active.</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Profile dropdown -->
+                    <div class="dropdown">
+                        <div class="user-profile-dropdown" data-bs-toggle="dropdown">
+                            <div class="user-profile-avatar">
+                                {{ current_user.username[0].upper() }}
+                            </div>
+                            <div class="d-none d-md-block text-start">
+                                <span class="d-block fw-semibold" style="font-size: 0.85rem; line-height: 1;">{{ current_user.username }}</span>
+                                <span class="text-muted" style="font-size: 0.75rem;">{{ current_user.role.upper() }}</span>
+                            </div>
+                        </div>
+                        <ul class="dropdown-menu dropdown-menu-end border-0 shadow" style="border-radius: 12px; background-color: var(--card-bg);">
+                            <li><a class="dropdown-item text-dark" href="{{ url_for('profile_settings') }}"><i class="fa-regular fa-user me-2"></i>Profile Settings</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item text-danger" href="{{ url_for('logout') }}"><i class="fa-solid fa-right-from-bracket me-2"></i>Log Out</a></li>
+                        </ul>
+                    </div>
+                </div>
+            </header>
+            
+            <!-- Toast notification container -->
+            <div id="toast-container" class="toast-container position-fixed bottom-0 end-0 p-3" style="z-index: 1050;"></div>
+            
+            <div class="main-content">
+                <!-- FLASHER MESSAGES -->
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                        {% for category, message in messages %}
+                            <div class="alert alert-{% if category == 'error' %}danger{% else %}{{ category }}{% endif %} alert-dismissible fade show border-0" role="alert" style="border-radius: 12px; box-shadow: var(--shadow-sm);">
+                                {{ message }}
+                                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                            </div>
+                        {% endfor %}
+                    {% endif %}
+                {% endwith %}
+                
+                {% block content %}{% endblock %}
+            </div>
+        </main>
+    </div>
+    {% else %}
+        {% block full_content %}{% endblock %}
+    {% endif %}
+
+    <!-- Bootstrap 5 JS Bundle -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- Custom Theme mode Switch Script -->
+    <script>
+        function toggleThemeMode() {
+            const currentTheme = document.documentElement.getAttribute('data-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            
+            document.documentElement.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+            
+            // Toggle icon classes
+            const icon = document.getElementById('themeIcon');
+            if (newTheme === 'dark') {
+                icon.className = 'fa-solid fa-sun';
+            } else {
+                icon.className = 'fa-solid fa-moon';
+            }
+        }
+        
+        // Match icon on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
+            const icon = document.getElementById('themeIcon');
+            if (icon) {
+                if (currentTheme === 'dark') {
+                    icon.className = 'fa-solid fa-sun';
+                } else {
+                    icon.className = 'fa-solid fa-moon';
+                }
+            }
+        });
+    </script>
+    
+    <!-- Admin or Driver script extensions -->
+    {% if current_user.is_authenticated %}
+        {% if current_user.role == 'admin' %}
+            <script src="{{ url_for('static', filename='js/admin.js') }}"></script>
+        {% elif current_user.role == 'driver' %}
+            <script src="{{ url_for('static', filename='js/driver.js') }}"></script>
+        {% endif %}
+    {% endif %}
+    
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

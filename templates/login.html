@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+
+{% block title %}Sign In - ParcelFleet{% endblock %}
+
+{% block full_content %}
+<div class="login-screen">
+    <!-- LEFT PANEL: PREMIUM LOGISTICS GRAPHICS -->
+    <div class="login-left">
+        <div class="login-brand">
+            <!-- Large Cargo Truck SVG -->
+            <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect x="6" y="24" width="34" height="24" rx="4" fill="#3B82F6"/>
+                <path d="M40 28H48L56 36V48H40V28Z" fill="#60A5FA"/>
+                <circle cx="16" cy="50" r="6" fill="#F8FAFC" stroke="#1E293B" stroke-width="3"/>
+                <circle cx="48" cy="50" r="6" fill="#F8FAFC" stroke="#1E293B" stroke-width="3"/>
+                <rect x="12" y="16" width="16" height="8" rx="2" fill="#2563EB"/>
+            </svg>
+            <h1>ParcelFleet</h1>
+        </div>
+        
+        <!-- Bouncing Truck Graphic -->
+        <div class="truck-animation mb-4">
+            <svg viewBox="0 0 200 120" fill="none" xmlns="http://www.w3.org/2000/svg" width="100%" height="100%">
+                <rect x="20" y="40" width="110" height="60" rx="6" fill="#2563EB" />
+                <path d="M130 50H160L185 75V100H130V50Z" fill="#60A5FA" />
+                <rect x="140" y="55" width="22" height="16" fill="#1E293B" />
+                <circle cx="50" cy="105" r="14" fill="#1E293B" stroke="#F8FAFC" stroke-width="4"/>
+                <circle cx="150" cy="105" r="14" fill="#1E293B" stroke="#F8FAFC" stroke-width="4"/>
+                <!-- Speed Lines -->
+                <line x1="5" y1="50" x2="15" y2="50" stroke="#F8FAFC" stroke-width="3" stroke-linecap="round"/>
+                <line x1="-5" y1="65" x2="10" y2="65" stroke="#60A5FA" stroke-width="3" stroke-linecap="round"/>
+                <line x1="2" y1="80" x2="12" y2="80" stroke="#F8FAFC" stroke-width="3" stroke-linecap="round"/>
+            </svg>
+        </div>
+
+        <h2 class="login-tagline">Smart Courier & Fleet Management System</h2>
+        <p class="login-sub">An enterprise-grade logistics solution automating real-time dispatch, route optimization, secure handoff validations, and comprehensive telemetry audits across Kathmandu Valley.</p>
+        
+        <div class="d-flex gap-3 no-print z-10">
+            <a href="{{ url_for('customer_tracking_view') }}" class="btn btn-outline-light rounded-pill px-4" style="border-width: 2px;">
+                <i class="fas fa-search me-2"></i>Track a Parcel
+            </a>
+        </div>
+    </div>
+
+    <!-- RIGHT PANEL: LOGIN INTERACTIVE FORM -->
+    <div class="login-right">
+        <div class="login-form-container">
+            <div class="text-center text-md-start">
+                <h2 class="login-form-title">Welcome Back</h2>
+                <p class="login-form-subtitle">Enter your logistics agent credentials to sign in.</p>
+            </div>
+            
+            <!-- Flask Message Box -->
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="alert alert-{% if category == 'error' %}danger{% else %}{{ category }}{% endif %} border-0 p-3" style="border-radius: 12px;">
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+
+            <div class="glass-card">
+                <form method="POST" action="{{ url_for('login') }}">
+                    <!-- Username Input -->
+                    <div class="mb-3">
+                        <label for="username" class="form-label text-dark fw-semibold" style="font-size: 0.85rem;">Username</label>
+                        <div class="input-group">
+                            <span class="input-group-text border-end-0 bg-transparent text-muted"><i class="fa-regular fa-user"></i></span>
+                            <input type="text" class="form-control border-start-0 ps-0" id="username" name="username" placeholder="e.g. admin or driver1" required style="border-radius: 0 var(--border-radius-sm) var(--border-radius-sm) 0;">
+                        </div>
+                    </div>
+                    
+                    <!-- Password Input -->
+                    <div class="mb-4">
+                        <label for="password" class="form-label text-dark fw-semibold" style="font-size: 0.85rem;">Password</label>
+                        <div class="input-group">
+                            <span class="input-group-text border-end-0 bg-transparent text-muted"><i class="fa-solid fa-lock"></i></span>
+                            <input type="password" class="form-control border-start-0 ps-0" id="password" name="password" placeholder="••••••••" required style="border-radius: 0 var(--border-radius-sm) var(--border-radius-sm) 0;">
+                        </div>
+                    </div>
+                    
+                    <!-- Remember Me Option -->
+                    <div class="mb-4 d-flex justify-content-between align-items-center">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="remember" name="remember">
+                            <label class="form-check-label text-muted" for="remember" style="font-size: 0.85rem;">
+                                Remember Me
+                            </label>
+                        </div>
+                        <a href="#" class="text-decoration-none text-primary" style="font-size: 0.85rem;">Forgot Password?</a>
+                    </div>
+                    
+                    <!-- Sign In Button -->
+                    <button type="submit" class="btn btn-primary w-100 rounded-pill py-2.5 fw-bold mb-3" style="background-color: var(--primary-color); border: none; font-size: 0.95rem;">
+                        Sign In <i class="fas fa-arrow-right ms-2"></i>
+                    </button>
+
+                    <div class="text-center">
+                        <a href="{{ url_for('driver_register') }}" class="text-decoration-none text-primary fw-semibold" style="font-size: 0.85rem;">New Driver? Register your account</a>
+                    </div>
+                </form>
+            </div>
+            
+            <div class="text-center mt-4">
+                <span class="text-muted" style="font-size: 0.8rem;">BCA Final Year Project Demonstration.</span>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,348 @@
+{% extends "base.html" %}
+
+{% block title %}Driver Panel - ParcelFleet{% endblock %}
+{% block page_title %}Driver Console{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+    <!-- DRIVER CONTROLS & BROADCAST PANEL -->
+    <div class="col-12 col-lg-4">
+        <!-- Floating Status controls -->
+        <div class="premium-card mb-4 bg-primary text-white border-0 shadow-lg" style="background: linear-gradient(135deg, var(--primary-color) 0%, #1E40AF 100%) !important;">
+            <h5 class="fw-bold mb-3"><i class="fas fa-satellite-dish me-2 text-white"></i>GPS Location Broadcast</h5>
+            
+            <div class="mb-4">
+                <label for="driverStateSelect" class="form-label" style="font-size: 0.8rem; opacity: 0.8;">Set Operational State</label>
+                <select class="form-select bg-white border-0 text-dark" id="driverStateSelect" style="border-radius: var(--border-radius-sm);">
+                    <option value="Available" {% if driver.availability == 'Available' %}selected{% endif %}>Available (Idle)</option>
+                    <option value="On Delivery" {% if driver.availability == 'On Delivery' %}selected{% endif %}>On Delivery (Active)</option>
+                    <option value="On Break" {% if driver.availability == 'On Break' %}selected{% endif %}>On Break</option>
+                    <option value="Offline" {% if driver.availability == 'Offline' %}selected{% endif %}>Offline</option>
+                </select>
+            </div>
+            
+            <div class="form-check form-switch d-flex align-items-center justify-content-between p-0 mb-2">
+                <div>
+                    <label class="form-check-label fw-bold" for="shareLocationToggle" style="font-size: 1rem;">Share Live GPS Location</label>
+                    <small class="d-block text-white text-opacity-70" style="font-size: 0.75rem;">Simulates traversal along Dijkstra path points</small>
+                </div>
+                <input class="form-check-input ms-0" type="checkbox" role="switch" id="shareLocationToggle" data-driver-id="{{ driver.id }}" style="width: 50px; height: 26px; cursor: pointer;">
+            </div>
+        </div>
+
+        <!-- Mini Stats card -->
+        <div class="premium-card">
+            <h6 class="premium-card-title"><i class="fas fa-chart-simple text-primary me-2"></i>My Delivery Summary</h6>
+            <div class="row row-cols-3 g-2 text-center text-dark">
+                <div class="col border-end border-light">
+                    <span class="d-block text-muted" style="font-size: 0.65rem; uppercase">Assigned</span>
+                    <strong style="font-size: 1.25rem;">{{ active_deliveries | length }}</strong>
+                </div>
+                <div class="col border-end border-light">
+                    <span class="d-block text-muted" style="font-size: 0.65rem; uppercase">Completed</span>
+                    <strong style="font-size: 1.25rem; color: var(--success-color);">{{ driver.completed_deliveries }}</strong>
+                </div>
+                <div class="col">
+                    <span class="d-block text-muted" style="font-size: 0.65rem; uppercase">Avg Min</span>
+                    <strong style="font-size: 1.25rem; color: var(--primary-color);">{{ driver.average_delivery_time | round(1) }}</strong>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ASSIGNED TASK LISTINGS -->
+    <div class="col-12 col-lg-8">
+        <h5 class="fw-bold text-dark mb-3"><i class="fas fa-list-check me-2 text-primary"></i>My Shipment Queue</h5>
+        
+        <!-- Tabs Navigation -->
+        <ul class="nav nav-pills mb-4 gap-2" id="deliveryTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active rounded-pill px-4 fw-semibold" id="active-tab" data-bs-toggle="pill" data-bs-target="#active-deliveries" type="button" role="tab" aria-controls="active-deliveries" aria-selected="true" style="transition: all 0.2s ease;">
+                    <i class="fas fa-truck-ramp-box me-2"></i>Active Queue ({{ active_deliveries | length }})
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link rounded-pill px-4 fw-semibold" id="history-tab" data-bs-toggle="pill" data-bs-target="#history-deliveries" type="button" role="tab" aria-controls="history-deliveries" aria-selected="false" style="transition: all 0.2s ease;">
+                    <i class="fas fa-clock-rotate-left me-2"></i>Delivery History ({{ history_deliveries | length }})
+                </button>
+            </li>
+        </ul>
+
+        <div class="tab-content" id="deliveryTabsContent">
+            <!-- TAB 1: ACTIVE QUEUE -->
+            <div class="tab-pane fade show active" id="active-deliveries" role="tabpanel" aria-labelledby="active-tab">
+                {% if not active_deliveries %}
+                <div class="premium-card text-center py-5">
+                    <!-- Empty state SVG -->
+                    <svg viewBox="0 0 100 100" width="80" height="80" class="mb-3 text-muted" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                        <path d="M20 25h60v50H20zM35 15h30" />
+                        <circle cx="50" cy="50" r="10" />
+                        <path d="M40 75v10M60 75v10" />
+                    </svg>
+                    <h6 class="fw-bold text-dark">No active deliveries assigned!</h6>
+                    <p class="text-muted" style="font-size: 0.85rem;">Set state to 'Available' to receive dispatch queues from admin.</p>
+                </div>
+                {% else %}
+                <div class="row row-cols-1 g-3">
+                    {% for p in active_deliveries %}
+                    <div class="col">
+                        <div class="premium-card p-3 mb-0 border border-light shadow-sm">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <div>
+                                    <span class="badge bg-primary-subtle text-primary border-0 rounded-pill mb-1" style="font-size: 0.7rem;">{{ p.tracking_id }}</span>
+                                    <span class="badge bg-secondary-subtle text-dark border-0 rounded-pill ms-1" style="font-size: 0.7rem;">{{ p.parcel_type }}</span>
+                                </div>
+                                <span class="status-badge {% if p.status == 'Pending' %}badge-pending{% elif p.status == 'Assigned' %}badge-assigned{% elif p.status == 'Picked Up' %}badge-pickedup{% elif p.status == 'In Transit' %}badge-intransit{% elif p.status == 'Out For Delivery' %}badge-outfordelivery{% elif p.status == 'Delivered' %}badge-delivered{% else %}badge-cancelled{% endif %}" style="font-size: 0.7rem;">
+                                    {{ p.status }}
+                                </span>
+                            </div>
+                            
+                            <div class="row g-3 text-dark mb-3">
+                                <div class="col-12 col-md-6 border-end border-light">
+                                    <span class="text-muted d-block uppercase" style="font-size: 0.65rem;">Pickup from Hub</span>
+                                    <strong style="font-size: 0.95rem; color: var(--primary-color);">{{ p.pickup_address }}</strong>
+                                    <div class="text-muted mt-1" style="font-size: 0.8rem;">
+                                        <strong>Sender:</strong> {{ p.sender_name }} ({{ p.sender_phone }})
+                                    </div>
+                                </div>
+                                <div class="col-12 col-md-6">
+                                    <span class="text-muted d-block uppercase" style="font-size: 0.65rem;">Deliver to Hub</span>
+                                    <strong style="font-size: 0.95rem; color: var(--success-color);">{{ p.delivery_address }}</strong>
+                                    <div class="text-muted mt-1" style="font-size: 0.8rem;">
+                                        <strong>Receiver:</strong> {{ p.receiver_name }} ({{ p.receiver_phone }})
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="d-flex justify-content-between align-items-center pt-2 border-top border-light">
+                                <span class="fw-bold" style="font-size: 0.9rem;">
+                                    Charge: Rs. {{ p.delivery_charge }}
+                                    <span class="badge bg-{% if p.payment_status == 'Paid' %}success-subtle text-success{% else %}warning-subtle text-warning{% endif %} border-0 rounded-pill ms-1" style="font-size: 0.65rem;">
+                                        {{ p.payment_status }}
+                                    </span>
+                                </span>
+                                
+                                <div class="d-flex gap-2">
+                                    <a href="{{ url_for('live_tracking_view', tracking_id=p.tracking_id) }}" class="btn btn-sm btn-outline-primary rounded-pill px-3"><i class="fas fa-map-location-dot me-1"></i>Map Route</a>
+                                    <button class="btn btn-sm btn-primary rounded-pill px-3" data-bs-toggle="modal" data-bs-target="#updateStatusModal{{ p.id }}"><i class="fas fa-arrows-spin me-1"></i>Update Status</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- UPDATE WORKFLOW MODAL FOR DRIVER -->
+                    <div class="modal fade" id="updateStatusModal{{ p.id }}" tabindex="-1" data-bs-backdrop="static">
+                        <div class="modal-dialog modal-dialog-centered modal-lg">
+                            <div class="modal-content border-0 shadow-lg" style="border-radius: 16px; background-color: var(--card-bg);">
+                                <form method="POST" action="{{ url_for('update_parcel_status_driver', id=p.id) }}" enctype="multipart/form-data">
+                                    <div class="modal-header border-bottom border-light p-3">
+                                        <h5 class="modal-title fw-bold text-dark"><i class="fas fa-arrows-spin text-primary me-2"></i>Update Dispatch Status: {{ p.tracking_id }}</h5>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                    </div>
+                                    <div class="modal-body p-4 text-dark" style="max-height: 480px; overflow-y: auto;">
+                                        
+                                        <div class="mb-3">
+                                            <label for="statusSelect{{ p.id }}" class="form-label fw-semibold">Next Handoff Lifecycle Stage</label>
+                                            <select class="form-select status-workflow-select" name="status" id="statusSelect{{ p.id }}" data-parcel-id="{{ p.id }}" required onchange="toggleWorkflowSections(this)">
+                                                <option value="">-- Choose Lifecycle Stage --</option>
+                                                {% if p.status == 'Assigned' %}
+                                                <option value="Picked Up">Picked Up (Log package state)</option>
+                                                {% endif %}
+                                                {% if p.status == 'Picked Up' %}
+                                                <option value="In Transit">In Transit</option>
+                                                {% endif %}
+                                                {% if p.status == 'In Transit' %}
+                                                <option value="Out For Delivery">Out For Delivery</option>
+                                                {% endif %}
+                                                {% if p.status == 'Out For Delivery' %}
+                                                <option value="Delivered">Delivered (Success complete)</option>
+                                                <option value="Failed Attempt">Failed Delivery Attempt (Exception)</option>
+                                                {% endif %}
+                                            </select>
+                                        </div>
+
+                                        <!-- SECTION: PICKED UP IMAGE UPLOADER -->
+                                        <div class="mb-3 d-none" id="pickup_section{{ p.id }}">
+                                            <label class="form-label fw-semibold">Parcel State Verification Photo (Pickup) *</label>
+                                            <div class="photo-upload-preview mb-2" id="pickup_preview{{ p.id }}" onclick="document.getElementById('pickup_file{{ p.id }}').click()">
+                                                <div class="text-center upload-icon-container">
+                                                    <i class="fas fa-camera text-muted mb-2" style="font-size: 2rem;"></i>
+                                                    <span class="d-block text-muted" style="font-size: 0.8rem;">Tap/Click to Upload Pickup Photo</span>
+                                                </div>
+                                            </div>
+                                            <input type="file" name="pickup_image" id="pickup_file{{ p.id }}" class="d-none parcel-photo-input" accept="image/*" data-preview="pickup_preview{{ p.id }}">
+                                        </div>
+
+                                        <!-- SECTION: DELIVERED (POD SIGNATURE AND VERIFICATION) -->
+                                        <div class="d-none" id="delivered_section{{ p.id }}">
+                                            <h6 class="fw-bold text-primary border-bottom border-light pb-2 mb-3"><i class="fas fa-file-signature me-2"></i>Proof of Delivery Verification (POD)</h6>
+                                            
+                                            <!-- Delivery Proof Photo -->
+                                            <div class="mb-3">
+                                                <label class="form-label fw-semibold">Delivery Handoff Verification Photo *</label>
+                                                <div class="photo-upload-preview mb-2" id="delivery_preview{{ p.id }}" onclick="document.getElementById('delivery_file{{ p.id }}').click()">
+                                                    <div class="text-center upload-icon-container">
+                                                        <i class="fas fa-camera text-muted mb-2" style="font-size: 2rem;"></i>
+                                                        <span class="d-block text-muted" style="font-size: 0.8rem;">Tap/Click to Upload Handoff Photo</span>
+                                                    </div>
+                                                </div>
+                                                <input type="file" name="delivery_image" id="delivery_file{{ p.id }}" class="d-none parcel-photo-input" accept="image/*" data-preview="delivery_preview{{ p.id }}">
+                                            </div>
+
+                                            <!-- Notes textarea -->
+                                            <div class="mb-3">
+                                                <label for="delivery_notes" class="form-label fw-semibold">Handoff Confirmation Notes</label>
+                                                <textarea class="form-control" name="delivery_notes" placeholder="e.g. Handed over safely to Ram Sharma after OTP confirmation." rows="2"></textarea>
+                                            </div>
+
+                                            <!-- Signature pad Canvas -->
+                                            <div class="mb-3">
+                                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                                    <label class="form-label fw-semibold mb-0">Customer Digital Signature *</label>
+                                                    <button class="btn btn-sm btn-link text-danger text-decoration-none p-0" id="clearSignature">Clear signature</button>
+                                                </div>
+                                                <div class="signature-canvas-wrapper">
+                                                    <canvas id="signatureCanvas" class="signature-canvas"></canvas>
+                                                    <input type="hidden" name="customer_signature" id="customer_signature_data">
+                                                </div>
+                                                <small class="text-muted">Instruct the customer to draw their signature in the box using touch or mouse gestures.</small>
+                                            </div>
+                                        </div>
+
+                                        <!-- SECTION: FAILED ATTEMPT EXCEPTIONS -->
+                                        <div class="mb-3 d-none" id="failed_section{{ p.id }}">
+                                            <label for="failedReason{{ p.id }}" class="form-label fw-semibold">Failed Delivery Attempt Reason *</label>
+                                            <select class="form-select" name="failed_reason" id="failedReason{{ p.id }}">
+                                                <option value="">-- Choose Reason --</option>
+                                                <option value="Customer Not Available">Customer Not Available</option>
+                                                <option value="Incorrect Address">Incorrect Address</option>
+                                                <option value="Phone Unreachable">Phone Unreachable</option>
+                                                <option value="Parcel Refused">Parcel Refused by recipient</option>
+                                            </select>
+                                        </div>
+
+                                    </div>
+                                    <div class="modal-footer border-top border-light p-3">
+                                        <button type="button" class="btn btn-secondary rounded-pill px-3" data-bs-dismiss="modal">Cancel</button>
+                                        <button type="submit" class="btn btn-primary rounded-pill px-4" style="background-color: var(--primary-color); border: none;">Save Status</button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- TAB 2: DELIVERY HISTORY -->
+            <div class="tab-pane fade" id="history-deliveries" role="tabpanel" aria-labelledby="history-tab">
+                {% if not history_deliveries %}
+                <div class="premium-card text-center py-5">
+                    <svg viewBox="0 0 100 100" width="80" height="80" class="mb-3 text-muted" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                        <circle cx="50" cy="50" r="30" />
+                        <path d="M50 30v20h15" />
+                    </svg>
+                    <h6 class="fw-bold text-dark">No historical shipments found!</h6>
+                    <p class="text-muted" style="font-size: 0.85rem;">Completed or cancelled deliveries will be logged here.</p>
+                </div>
+                {% else %}
+                <div class="row row-cols-1 g-3">
+                    {% for p in history_deliveries %}
+                    <div class="col">
+                        <div class="premium-card p-3 mb-0 border border-light shadow-sm" style="background-color: #F8FAFC !important;">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <div>
+                                    <span class="badge bg-secondary-subtle text-dark border-0 rounded-pill mb-1" style="font-size: 0.7rem;">{{ p.tracking_id }}</span>
+                                    <span class="badge bg-light text-muted border border-secondary border-opacity-10 rounded-pill ms-1" style="font-size: 0.7rem;">{{ p.parcel_type }}</span>
+                                </div>
+                                <span class="status-badge {% if p.status == 'Delivered' %}badge-delivered{% else %}badge-cancelled{% endif %}" style="font-size: 0.7rem;">
+                                    {{ p.status }}
+                                </span>
+                            </div>
+                            
+                            <div class="row g-3 text-muted mb-3" style="font-size: 0.85rem;">
+                                <div class="col-12 col-md-6 border-end border-light">
+                                    <span class="text-muted d-block uppercase" style="font-size: 0.65rem;">Pickup Point</span>
+                                    <strong class="text-dark">{{ p.pickup_address }}</strong>
+                                </div>
+                                <div class="col-12 col-md-6">
+                                    <span class="text-muted d-block uppercase" style="font-size: 0.65rem;">Delivery Point</span>
+                                    <strong class="text-dark">{{ p.delivery_address }}</strong>
+                                </div>
+                            </div>
+
+                            <div class="d-flex justify-content-between align-items-center pt-2 border-top border-light">
+                                <span class="text-muted" style="font-size: 0.85rem;">
+                                    Charge: Rs. {{ p.delivery_charge }}
+                                    <span class="badge bg-success-subtle text-success border-0 rounded-pill ms-1" style="font-size: 0.65rem;">
+                                        {{ p.payment_status }}
+                                    </span>
+                                </span>
+                                
+                                <div class="d-flex gap-2">
+                                    <a href="{{ url_for('live_tracking_view', tracking_id=p.tracking_id) }}" class="btn btn-sm btn-outline-secondary rounded-pill px-3"><i class="fas fa-map-location-dot me-1"></i>View Route</a>
+                                    {% if p.status == 'Delivered' %}
+                                    <a href="{{ url_for('view_proof_of_delivery', id=p.id) }}" class="btn btn-sm btn-outline-success rounded-pill px-3"><i class="fas fa-file-invoice me-1"></i>POD Voucher</a>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // JS trigger to toggle different input areas of the modal based on select workflow
+    function toggleWorkflowSections(selectEl) {
+        const pId = selectEl.getAttribute('data-parcel-id');
+        const status = selectEl.value;
+        
+        const pickupSec = document.getElementById('pickup_section' + pId);
+        const deliveredSec = document.getElementById('delivered_section' + pId);
+        const failedSec = document.getElementById('failed_section' + pId);
+
+        // Hide all initially
+        if (pickupSec) pickupSec.classList.add('d-none');
+        if (deliveredSec) deliveredSec.classList.add('d-none');
+        if (failedSec) failedSec.classList.add('d-none');
+
+        // Show matching
+        if (status === 'Picked Up') {
+            if (pickupSec) pickupSec.classList.remove('d-none');
+            const file = document.getElementById('pickup_file' + pId);
+            if (file) file.setAttribute('required', 'required');
+        } else if (status === 'Delivered') {
+            if (deliveredSec) deliveredSec.classList.remove('d-none');
+            const file = document.getElementById('delivery_file' + pId);
+            if (file) file.setAttribute('required', 'required');
+            
+            // Re-initialize/resize signature canvas on modal view state
+            setTimeout(() => {
+                const canvas = document.getElementById('signatureCanvas');
+                if (canvas) {
+                    const rect = canvas.getBoundingClientRect();
+                    canvas.width = rect.width;
+                    canvas.height = rect.height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.strokeStyle = '#0F172A';
+                    ctx.lineWidth = 3;
+                    ctx.lineCap = 'round';
+                    ctx.lineJoin = 'round';
+                }
+            }, 100);
+        } else if (status === 'Failed Attempt') {
+            if (failedSec) failedSec.classList.remove('d-none');
+            const rSelect = document.getElementById('failedReason' + pId);
+            if (rSelect) rSelect.setAttribute('required', 'required');
+        }
+    }
+</script>
+{% endblock %}
