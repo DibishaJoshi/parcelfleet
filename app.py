@@ -4,7 +4,7 @@ import re
 from datetime import datetime, timedelta
 from io import BytesIO
 
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_file
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_file, session
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
@@ -15,10 +15,10 @@ import barcode
 from barcode.writer import ImageWriter
 
 # Models and Database
-from models import db, User, Driver, Parcel, TrackingHistory, NotificationLog
+from models import db, User, Driver, Parcel, TrackingHistory, NotificationLog, Hub, HubAdmin
 
 # Algorithms
-from algorithms import HUBS, GRAPH, dijkstra, greedy_driver_assignment, get_route_coordinates, haversine_distance, get_closest_hub, get_route_segments, fetch_osrm_route, fetch_osrm_routes_with_alternatives
+from algorithms import HUBS, GRAPH, dijkstra, greedy_driver_assignment, get_route_coordinates, haversine_distance, get_closest_hub, get_route_segments, fetch_osrm_route, fetch_osrm_routes_with_alternatives, get_all_hubs_dict
 
 def validate_phone(phone):
     if not phone:
@@ -58,7 +58,7 @@ def load_user(user_id):
 @app.route('/')
 def index():
     if current_user.is_authenticated:
-        if current_user.role == 'admin':
+        if current_user.role == 'admin' or current_user.role == 'hub_admin':
             return redirect(url_for('admin_dashboard'))
         elif current_user.role == 'driver':
             return redirect(url_for('driver_dashboard'))
@@ -81,12 +81,92 @@ def login():
             return redirect(url_for('login'))
             
         login_user(user, remember=remember)
-        if user.role == 'admin':
+        if user.role == 'admin' or user.role == 'hub_admin':
             return redirect(url_for('admin_dashboard'))
         elif user.role == 'driver':
             return redirect(url_for('driver_dashboard'))
             
     return render_template('login.html', no_layout=True)
+
+@app.route('/forgot-password', methods=['GET', 'POST'])
+def forgot_password():
+    if current_user.is_authenticated:
+        return redirect(url_for('index'))
+        
+    if request.method == 'POST':
+        username = request.form.get('username', '').strip()
+        phone = request.form.get('phone', '').strip()
+        
+        if not username or not phone:
+            flash("Please enter both username and registered mobile phone number.", "error")
+            return redirect(url_for('forgot_password'))
+            
+        user = User.query.filter_by(username=username).first()
+        if not user:
+            flash("Invalid username or phone number. Please try again.", "error")
+            return redirect(url_for('forgot_password'))
+            
+        match = False
+        if user.role == 'driver':
+            driver = Driver.query.filter_by(user_id=user.id).first()
+            if driver and driver.phone.strip() == phone:
+                match = True
+        elif user.role == 'hub_admin':
+            hub_admin = HubAdmin.query.filter_by(user_id=user.id).first()
+            if hub_admin and hub_admin.phone.strip() == phone:
+                match = True
+        elif user.role == 'admin':
+            if phone == '9841111111':
+                match = True
+                
+        if not match:
+            flash("Invalid username or phone number. Please try again.", "error")
+            return redirect(url_for('forgot_password'))
+            
+        session['reset_user_id'] = user.id
+        session['reset_verified'] = True
+        
+        flash("Identity successfully verified! Please choose your new password.", "success")
+        return redirect(url_for('reset_password'))
+        
+    return render_template('forgot_password.html', no_layout=True)
+
+@app.route('/reset-password', methods=['GET', 'POST'])
+def reset_password():
+    if current_user.is_authenticated:
+        return redirect(url_for('index'))
+        
+    if 'reset_user_id' not in session or not session.get('reset_verified'):
+        flash("Unauthorized reset attempt. Please verify your credentials first.", "error")
+        return redirect(url_for('forgot_password'))
+        
+    if request.method == 'POST':
+        password = request.form.get('password')
+        confirm_password = request.form.get('confirm_password')
+        
+        if not password or not confirm_password:
+            flash("All fields are required.", "error")
+            return redirect(url_for('reset_password'))
+            
+        if password != confirm_password:
+            flash("Passwords do not match.", "error")
+            return redirect(url_for('reset_password'))
+            
+        user = User.query.get(session['reset_user_id'])
+        if user:
+            user.password_hash = generate_password_hash(password)
+            db.session.commit()
+            
+            session.pop('reset_user_id', None)
+            session.pop('reset_verified', None)
+            
+            flash("Your password has been successfully reset! Please sign in with your new password.", "success")
+            return redirect(url_for('login'))
+        else:
+            flash("User profile not found. Please try again.", "error")
+            return redirect(url_for('forgot_password'))
+            
+    return render_template('reset_password.html', no_layout=True)
 
 @app.route('/driver/register', methods=['GET', 'POST'])
 def driver_register():
@@ -229,11 +309,22 @@ def profile_settings():
 @app.route('/admin/dashboard')
 @login_required
 def admin_dashboard():
-    if current_user.role != 'admin':
+    if current_user.role not in ['admin', 'hub_admin']:
         return redirect(url_for('index'))
         
+    # Get hub name if hub admin
+    hub_name = None
+    if current_user.role == 'hub_admin':
+        hub_admin_profile = HubAdmin.query.filter_by(user_id=current_user.id).first()
+        if hub_admin_profile:
+            hub_name = hub_admin_profile.hub.name
+            
     # Calculate operational metrics
-    parcels = Parcel.query.all()
+    if hub_name:
+        parcels = Parcel.query.filter((Parcel.pickup_hub == hub_name) | (Parcel.delivery_hub == hub_name)).all()
+    else:
+        parcels = Parcel.query.all()
+        
     drivers = Driver.query.all()
     
     total_revenue = sum(p.delivery_charge for p in parcels if p.status == 'Delivered' or p.payment_status == 'Paid')
@@ -262,25 +353,64 @@ def admin_dashboard():
     }
     
     # Fetch recent parcels and driver rankings
-    recent_parcels = Parcel.query.order_by(Parcel.created_at.desc()).limit(8).all()
+    if hub_name:
+        recent_parcels = Parcel.query.filter((Parcel.pickup_hub == hub_name) | (Parcel.delivery_hub == hub_name)).order_by(Parcel.created_at.desc()).limit(8).all()
+    else:
+        recent_parcels = Parcel.query.order_by(Parcel.created_at.desc()).limit(8).all()
+        
     driver_rankings = Driver.query.order_by(Driver.completed_deliveries.desc()).all()
     
-    return render_template('admin_dashboard.html', active_page='dashboard', stats=stats, recent_parcels=recent_parcels, driver_rankings=driver_rankings)
+    return render_template('admin_dashboard.html', active_page='dashboard', stats=stats, recent_parcels=recent_parcels, driver_rankings=driver_rankings, hub_name=hub_name)
 
 @app.route('/admin/parcels')
 @login_required
 def manage_parcels():
-    if current_user.role != 'admin':
+    if current_user.role not in ['admin', 'hub_admin']:
         return redirect(url_for('index'))
         
-    parcels = Parcel.query.order_by(Parcel.created_at.desc()).all()
+    hub_name = None
+    if current_user.role == 'hub_admin':
+        hub_admin_profile = HubAdmin.query.filter_by(user_id=current_user.id).first()
+        if hub_admin_profile:
+            hub_name = hub_admin_profile.hub.name
+            
+    if hub_name:
+        parcels = Parcel.query.filter((Parcel.pickup_hub == hub_name) | (Parcel.delivery_hub == hub_name)).order_by(Parcel.created_at.desc()).all()
+    else:
+        parcels = Parcel.query.order_by(Parcel.created_at.desc()).all()
+        
     drivers = Driver.query.all()
-    return render_template('parcels.html', active_page='parcels', parcels=parcels, drivers=drivers)
+    hubs = Hub.query.all()
+    return render_template('parcels.html', active_page='parcels', parcels=parcels, drivers=drivers, hubs=hubs, hub_name=hub_name)
+
+@app.route('/admin/parcel/<int:id>/details')
+@login_required
+def parcel_details(id):
+    if current_user.role not in ['admin', 'hub_admin']:
+        return redirect(url_for('index'))
+        
+    parcel = Parcel.query.get_or_404(id)
+    
+    # Hub Admin check: verify if the parcel belongs to their hub
+    hub_name = None
+    if current_user.role == 'hub_admin':
+        hub_admin_profile = HubAdmin.query.filter_by(user_id=current_user.id).first()
+        if hub_admin_profile:
+            hub_name = hub_admin_profile.hub.name
+            
+    if hub_name and parcel.pickup_hub != hub_name and parcel.delivery_hub != hub_name:
+        flash("Access Denied: This parcel does not belong to your hub.", "error")
+        return redirect(url_for('manage_parcels'))
+        
+    drivers = Driver.query.all()
+    hubs = Hub.query.all()
+    
+    return render_template('parcel_details.html', active_page='parcels', parcel=parcel, drivers=drivers, hubs=hubs, hub_name=hub_name)
 
 @app.route('/admin/book-parcel', methods=['POST'])
 @login_required
 def book_parcel():
-    if current_user.role != 'admin':
+    if current_user.role not in ['admin', 'hub_admin']:
         return redirect(url_for('index'))
         
     sender_name = request.form.get('sender_name', '').strip()
@@ -340,6 +470,15 @@ def book_parcel():
         if not existing:
             break
             
+    from algorithms import get_closest_hub
+    pickup_hub_name = get_closest_hub(pickup_latitude, pickup_longitude)
+    delivery_hub_name = get_closest_hub(delivery_latitude, delivery_longitude)
+    
+    if current_user.role == 'hub_admin':
+        hub_admin_profile = HubAdmin.query.filter_by(user_id=current_user.id).first()
+        if hub_admin_profile:
+            pickup_hub_name = hub_admin_profile.hub.name
+    
     parcel = Parcel(
         tracking_id=tracking_id,
         sender_name=sender_name,
@@ -352,6 +491,8 @@ def book_parcel():
         pickup_longitude=pickup_longitude,
         delivery_latitude=delivery_latitude,
         delivery_longitude=delivery_longitude,
+        pickup_hub=pickup_hub_name,
+        delivery_hub=delivery_hub_name,
         parcel_type=parcel_type,
         weight=weight,
         length=length,
@@ -383,7 +524,7 @@ def book_parcel():
 @app.route('/admin/edit-parcel/<int:id>', methods=['POST'])
 @login_required
 def edit_parcel(id):
-    if current_user.role != 'admin':
+    if current_user.role not in ['admin', 'hub_admin']:
         return redirect(url_for('index'))
         
     parcel = Parcel.query.get_or_404(id)
@@ -438,6 +579,7 @@ def edit_parcel(id):
 
     
     # Apply edits
+    from algorithms import get_closest_hub
     parcel.sender_name = sender_name
     parcel.sender_phone = sender_phone
     parcel.receiver_name = receiver_name
@@ -448,6 +590,16 @@ def edit_parcel(id):
     parcel.pickup_longitude = pickup_longitude
     parcel.delivery_latitude = delivery_latitude
     parcel.delivery_longitude = delivery_longitude
+    pickup_hub_name = get_closest_hub(pickup_latitude, pickup_longitude)
+    delivery_hub_name = get_closest_hub(delivery_latitude, delivery_longitude)
+    
+    if current_user.role == 'hub_admin':
+        hub_admin_profile = HubAdmin.query.filter_by(user_id=current_user.id).first()
+        if hub_admin_profile:
+            pickup_hub_name = hub_admin_profile.hub.name
+            
+    parcel.pickup_hub = pickup_hub_name
+    parcel.delivery_hub = delivery_hub_name
     parcel.parcel_type = parcel_type
     parcel.weight = weight
     parcel.length = length
@@ -505,12 +657,12 @@ def edit_parcel(id):
             
     db.session.commit()
     flash(f"Parcel {parcel.tracking_id} details updated successfully!", "success")
-    return redirect(url_for('manage_parcels'))
+    return redirect(url_for('parcel_details', id=parcel.id))
 
 @app.route('/admin/assign-driver-manual/<int:id>', methods=['POST'])
 @login_required
 def assign_driver_manual(id):
-    if current_user.role != 'admin':
+    if current_user.role not in ['admin', 'hub_admin']:
         return redirect(url_for('index'))
         
     parcel = Parcel.query.get_or_404(id)
@@ -539,17 +691,26 @@ def assign_driver_manual(id):
             
             flash(f"Driver {driver.name} successfully assigned to order {parcel.tracking_id}!", "success")
             
-    return redirect(url_for('manage_parcels'))
+    return redirect(url_for('parcel_details', id=parcel.id))
 
 @app.route('/admin/run-fcfs-dispatch', methods=['POST'])
 @login_required
 def run_fcfs_dispatch():
-    if current_user.role != 'admin':
+    if current_user.role not in ['admin', 'hub_admin']:
         return redirect(url_for('index'))
         
-    # Fetch all Pending parcels, FCFS ordered by creation date ascending
-    pending_parcels = Parcel.query.filter_by(status='Pending').order_by(Parcel.created_at.asc()).all()
-    
+    hub_name = None
+    if current_user.role == 'hub_admin':
+        hub_admin_profile = HubAdmin.query.filter_by(user_id=current_user.id).first()
+        if hub_admin_profile:
+            hub_name = hub_admin_profile.hub.name
+
+    # Fetch Pending parcels, FCFS ordered by creation date ascending
+    if hub_name:
+        pending_parcels = Parcel.query.filter_by(status='Pending').filter((Parcel.pickup_hub == hub_name) | (Parcel.delivery_hub == hub_name)).order_by(Parcel.created_at.asc()).all()
+    else:
+        pending_parcels = Parcel.query.filter_by(status='Pending').order_by(Parcel.created_at.asc()).all()
+        
     if not pending_parcels:
         flash("No pending parcel orders found in dispatch queue.", "info")
         return redirect(url_for('admin_dashboard'))
@@ -726,6 +887,265 @@ def delete_driver(id):
     db.session.commit()
     flash(f"Driver {name} successfully deleted!", "success")
     return redirect(url_for('manage_drivers'))
+
+# --- HUB & HUB ADMIN MANAGEMENT ROUTES ---
+
+@app.route('/admin/hubs')
+@login_required
+def manage_hubs():
+    if current_user.role != 'admin':
+        return redirect(url_for('index'))
+        
+    hubs = Hub.query.all()
+    hub_admins = HubAdmin.query.all()
+    return render_template('hubs.html', active_page='hubs', hubs=hubs, hub_admins=hub_admins)
+
+@app.route('/admin/create-hub', methods=['POST'])
+@login_required
+def create_hub():
+    if current_user.role != 'admin':
+        return redirect(url_for('index'))
+        
+    name = request.form.get('name', '').strip()
+    try:
+        latitude = float(request.form.get('latitude', 0.0))
+        longitude = float(request.form.get('longitude', 0.0))
+    except ValueError:
+        flash("Validation Error: Invalid coordinates.", "error")
+        return redirect(url_for('manage_hubs'))
+        
+    if not name:
+        flash("Validation Error: Hub name cannot be empty.", "error")
+        return redirect(url_for('manage_hubs'))
+        
+    if not validate_coords(latitude, longitude):
+        flash("Validation Error: Coordinates must reside within Kathmandu Valley boundary box (Lat: 27.5-27.9, Lng: 85.1-85.5).", "error")
+        return redirect(url_for('manage_hubs'))
+        
+    existing = Hub.query.filter_by(name=name).first()
+    if existing:
+        flash(f"Hub with name '{name}' already exists.", "error")
+        return redirect(url_for('manage_hubs'))
+        
+    hub = Hub(name=name, latitude=latitude, longitude=longitude)
+    db.session.add(hub)
+    db.session.commit()
+    
+    flash(f"Hub '{name}' created successfully!", "success")
+    return redirect(url_for('manage_hubs'))
+
+@app.route('/admin/create-hub-admin', methods=['POST'])
+@login_required
+def create_hub_admin():
+    if current_user.role != 'admin':
+        return redirect(url_for('index'))
+        
+    name = request.form.get('name', '').strip()
+    phone = request.form.get('phone', '').strip()
+    email = request.form.get('email', '').strip()
+    hub_id = request.form.get('hub_id')
+    
+    create_login = request.form.get('create_login') == 'yes'
+    username = request.form.get('username', '').strip()
+    password = request.form.get('password', '').strip()
+    
+    if not name or not phone or not hub_id:
+        flash("Validation Error: Name, phone, and hub assignment are required.", "error")
+        return redirect(url_for('manage_hubs'))
+        
+    if not validate_phone(phone):
+        flash("Validation Error: Phone format invalid. Must be 10-digit Nepali number starting with 98, 97, or 96.", "error")
+        return redirect(url_for('manage_hubs'))
+        
+    existing_phone = HubAdmin.query.filter_by(phone=phone).first()
+    if existing_phone:
+        flash("Validation Error: A Hub Admin profile with this phone number already exists.", "error")
+        return redirect(url_for('manage_hubs'))
+        
+    user = None
+    if create_login:
+        if not username or not password:
+            flash("Validation Error: Username and password are required if creating a login account.", "error")
+            return redirect(url_for('manage_hubs'))
+            
+        existing_user = User.query.filter_by(username=username).first()
+        if existing_user:
+            flash(f"Validation Error: Username '{username}' is already taken.", "error")
+            return redirect(url_for('manage_hubs'))
+            
+        user = User(
+            username=username,
+            password_hash=generate_password_hash(password),
+            role='hub_admin'
+        )
+        db.session.add(user)
+        db.session.commit()
+        
+    hub_admin = HubAdmin(
+        user_id=user.id if user else None,
+        name=name,
+        phone=phone,
+        email=email if email else None,
+        hub_id=int(hub_id)
+    )
+    db.session.add(hub_admin)
+    db.session.commit()
+    
+    if user:
+        flash(f"Hub Admin profile and login account '{username}' created successfully!", "success")
+    else:
+        flash(f"Hub Admin profile for '{name}' created! They can now register their user login using their phone or email.", "success")
+        
+    return redirect(url_for('manage_hubs'))
+
+@app.route('/admin/edit-hub/<int:id>', methods=['POST'])
+@login_required
+def edit_hub(id):
+    if current_user.role != 'admin':
+        return redirect(url_for('index'))
+        
+    hub = Hub.query.get_or_404(id)
+    name = request.form.get('name', '').strip()
+    try:
+        latitude = float(request.form.get('latitude', 0.0))
+        longitude = float(request.form.get('longitude', 0.0))
+    except ValueError:
+        flash("Validation Error: Invalid coordinates.", "error")
+        return redirect(url_for('manage_hubs'))
+        
+    if not name:
+        flash("Validation Error: Hub name cannot be empty.", "error")
+        return redirect(url_for('manage_hubs'))
+        
+    if not validate_coords(latitude, longitude):
+        flash("Validation Error: Coordinates must reside within Kathmandu Valley boundary box (Lat: 27.5-27.9, Lng: 85.1-85.5).", "error")
+        return redirect(url_for('manage_hubs'))
+        
+    if name != hub.name:
+        existing = Hub.query.filter_by(name=name).first()
+        if existing:
+            flash(f"Hub with name '{name}' already exists.", "error")
+            return redirect(url_for('manage_hubs'))
+            
+    hub.name = name
+    hub.latitude = latitude
+    hub.longitude = longitude
+    db.session.commit()
+    
+    flash(f"Hub '{name}' updated successfully!", "success")
+    return redirect(url_for('manage_hubs'))
+
+@app.route('/admin/edit-hub-admin/<int:id>', methods=['POST'])
+@login_required
+def edit_hub_admin(id):
+    if current_user.role != 'admin':
+        return redirect(url_for('index'))
+        
+    hub_admin = HubAdmin.query.get_or_404(id)
+    name = request.form.get('name', '').strip()
+    phone = request.form.get('phone', '').strip()
+    email = request.form.get('email', '').strip()
+    hub_id = request.form.get('hub_id')
+    
+    if not name or not phone or not hub_id:
+        flash("Validation Error: Name, phone, and hub assignment are required.", "error")
+        return redirect(url_for('manage_hubs'))
+        
+    if not validate_phone(phone):
+        flash("Validation Error: Phone format invalid. Must be 10-digit Nepali number starting with 98, 97, or 96.", "error")
+        return redirect(url_for('manage_hubs'))
+        
+    if phone != hub_admin.phone:
+        existing = HubAdmin.query.filter_by(phone=phone).first()
+        if existing:
+            flash("Validation Error: A Hub Admin with this phone number already exists.", "error")
+            return redirect(url_for('manage_hubs'))
+            
+    hub_admin.name = name
+    hub_admin.phone = phone
+    hub_admin.email = email if email else None
+    hub_admin.hub_id = int(hub_id)
+    db.session.commit()
+    
+    flash(f"Hub Admin profile for '{name}' updated successfully!", "success")
+    return redirect(url_for('manage_hubs'))
+
+@app.route('/admin/delete-hub/<int:id>')
+@login_required
+def delete_hub(id):
+    if current_user.role != 'admin':
+        return redirect(url_for('index'))
+        
+    hub = Hub.query.get_or_404(id)
+    db.session.delete(hub)
+    db.session.commit()
+    flash("Hub successfully deleted.", "success")
+    return redirect(url_for('manage_hubs'))
+
+@app.route('/admin/delete-hub-admin/<int:id>')
+@login_required
+def delete_hub_admin(id):
+    if current_user.role != 'admin':
+        return redirect(url_for('index'))
+        
+    hub_admin = HubAdmin.query.get_or_404(id)
+    user = hub_admin.user
+    if user:
+        db.session.delete(user)
+    db.session.delete(hub_admin)
+    db.session.commit()
+    flash("Hub Admin profile successfully deleted.", "success")
+    return redirect(url_for('manage_hubs'))
+
+@app.route('/hub-admin/register', methods=['GET', 'POST'])
+def hub_admin_register():
+    if current_user.is_authenticated:
+        return redirect(url_for('index'))
+        
+    if request.method == 'POST':
+        identifier = request.form.get('identifier', '').strip()
+        username = request.form.get('username', '').strip()
+        password = request.form.get('password', '').strip()
+        confirm_password = request.form.get('confirm_password', '').strip()
+        
+        if not identifier or not username or not password:
+            flash("All fields are required.", "error")
+            return redirect(url_for('hub_admin_register'))
+            
+        if password != confirm_password:
+            flash("Passwords do not match.", "error")
+            return redirect(url_for('hub_admin_register'))
+            
+        # Search by phone or email
+        profile = HubAdmin.query.filter((HubAdmin.phone == identifier) | (HubAdmin.email == identifier)).first()
+        if not profile:
+            flash("The provided phone number or email is not registered in our system. Please contact the administrator.", "error")
+            return redirect(url_for('hub_admin_register'))
+            
+        if profile.user_id is not None:
+            flash("This hub admin profile already has a registered account. Please sign in.", "error")
+            return redirect(url_for('hub_admin_register'))
+            
+        existing_user = User.query.filter_by(username=username).first()
+        if existing_user:
+            flash(f"Username '{username}' is already taken.", "error")
+            return redirect(url_for('hub_admin_register'))
+            
+        user = User(
+            username=username,
+            password_hash=generate_password_hash(password),
+            role='hub_admin'
+        )
+        db.session.add(user)
+        db.session.commit()
+        
+        profile.user_id = user.id
+        db.session.commit()
+        
+        flash("Your Hub Admin account has been registered successfully! Please sign in.", "success")
+        return redirect(url_for('login'))
+        
+    return render_template('hub_admin_register.html', no_layout=True)
 
 @app.route('/admin/cancel-parcel/<int:id>')
 @login_required
@@ -965,6 +1385,13 @@ def api_parcel_route(tracking_id):
     if parcel.assigned_driver and parcel.assigned_driver.latitude and parcel.assigned_driver.longitude:
         driver_coords = {'lat': parcel.assigned_driver.latitude, 'lng': parcel.assigned_driver.longitude}
         
+    hubs_dict = get_all_hubs_dict()
+    pickup_hub = hubs_dict.get(parcel.pickup_hub)
+    delivery_hub = hubs_dict.get(parcel.delivery_hub)
+    
+    if not pickup_hub or not delivery_hub:
+        return jsonify({'error': 'Invalid hubs'}), 400
+
     # Determine start and end coordinates based on live status
     routing_from_driver = False
     if driver_coords and parcel.status in ['Assigned', 'Picked Up', 'In Transit', 'Out For Delivery']:
@@ -974,17 +1401,21 @@ def api_parcel_route(tracking_id):
         start_name = 'Driver Location'
         
         if parcel.status == 'Assigned':
-            end_lat = parcel.pickup_latitude
-            end_lng = parcel.pickup_longitude
-            end_name = 'Home Pickup'
-        else:
+            end_lat = pickup_hub['lat']
+            end_lng = pickup_hub['lng']
+            end_name = f"{parcel.pickup_hub} Hub"
+        elif parcel.status in ['Picked Up', 'In Transit']:
+            end_lat = delivery_hub['lat']
+            end_lng = delivery_hub['lng']
+            end_name = f"{parcel.delivery_hub} Hub"
+        else: # Out For Delivery
             end_lat = parcel.delivery_latitude
             end_lng = parcel.delivery_longitude
             end_name = 'Home Delivery'
     else:
-        start_lat = parcel.pickup_latitude
-        start_lng = parcel.pickup_longitude
-        start_name = 'Home Pickup'
+        start_lat = pickup_hub['lat']
+        start_lng = pickup_hub['lng']
+        start_name = f"{parcel.pickup_hub} Hub"
         end_lat = parcel.delivery_latitude
         end_lng = parcel.delivery_longitude
         end_name = 'Home Delivery'
@@ -1015,7 +1446,7 @@ def api_parcel_route(tracking_id):
         }]
         
         return jsonify({
-            'pickup': {'name': 'Home Pickup', 'lat': parcel.pickup_latitude, 'lng': parcel.pickup_longitude},
+            'pickup': {'name': f"{parcel.pickup_hub} Hub", 'lat': pickup_hub['lat'], 'lng': pickup_hub['lng']},
             'delivery': {'name': 'Home Delivery', 'lat': parcel.delivery_latitude, 'lng': parcel.delivery_longitude},
             'path': recommended_route_pts,
             'segments': segments,
@@ -1023,30 +1454,19 @@ def api_parcel_route(tracking_id):
             'driver': driver_data
         })
         
-    # Fallback to standard hub-to-hub Dijkstra route when driver is offline or parcel is pending
-    pickup_hub_name = get_closest_hub(start_lat, start_lng)
-    delivery_hub_name = get_closest_hub(end_lat, end_lng)
-    
-    pickup_hub = HUBS.get(pickup_hub_name)
-    delivery_hub = HUBS.get(delivery_hub_name)
-    
-    if not pickup_hub or not delivery_hub:
-        return jsonify({'error': 'Invalid hubs'}), 400
-        
-    path, distance = dijkstra(pickup_hub_name, delivery_hub_name)
+    # Fallback to standard hub-to-home Dijkstra route when driver is offline or parcel is pending
+    path, distance = dijkstra(parcel.pickup_hub, parcel.delivery_hub)
     hub_coords = get_route_coordinates(path)
     
     path_coords = []
-    path_coords.append({'name': start_name, 'lat': start_lat, 'lng': start_lng})
     path_coords.extend(hub_coords)
-    path_coords.append({'name': end_name, 'lat': end_lat, 'lng': end_lng})
+    path_coords.append({'name': 'Home Delivery', 'lat': parcel.delivery_latitude, 'lng': parcel.delivery_longitude})
     
-    from_coords = {'lat': start_lat, 'lng': start_lng}
-    to_coords = {'lat': end_lat, 'lng': end_lng}
-    segments = get_route_segments(path, from_coords, to_coords)
+    to_coords = {'lat': parcel.delivery_latitude, 'lng': parcel.delivery_longitude}
+    segments = get_route_segments(path, pickup_coords=None, delivery_coords=to_coords)
     
     return jsonify({
-        'pickup': {'name': 'Home Pickup', 'lat': parcel.pickup_latitude, 'lng': parcel.pickup_longitude},
+        'pickup': {'name': f"{parcel.pickup_hub} Hub", 'lat': pickup_hub['lat'], 'lng': pickup_hub['lng']},
         'delivery': {'name': 'Home Delivery', 'lat': parcel.delivery_latitude, 'lng': parcel.delivery_longitude},
         'path': path_coords,
         'segments': segments,
@@ -1082,8 +1502,9 @@ def api_parcel_telemetry(tracking_id):
         
         # Total route distance for progress percentage (Home-to-Home)
         path, total_dist = dijkstra(pickup_hub_name, delivery_hub_name)
-        pickup_hub_coords = HUBS.get(pickup_hub_name)
-        delivery_hub_coords = HUBS.get(delivery_hub_name)
+        hubs_dict = get_all_hubs_dict()
+        pickup_hub_coords = hubs_dict.get(pickup_hub_name)
+        delivery_hub_coords = hubs_dict.get(delivery_hub_name)
         
         dist_pickup_to_hub = haversine_distance(parcel.pickup_latitude, parcel.pickup_longitude, pickup_hub_coords['lat'], pickup_hub_coords['lng'])
         dist_hub_to_delivery = haversine_distance(delivery_hub_coords['lat'], delivery_hub_coords['lng'], parcel.delivery_latitude, parcel.delivery_longitude)
@@ -1112,8 +1533,9 @@ def api_parcel_telemetry(tracking_id):
     else:
         # Unassigned / Pending
         path, total_dist = dijkstra(pickup_hub_name, delivery_hub_name)
-        pickup_hub_coords = HUBS.get(pickup_hub_name)
-        delivery_hub_coords = HUBS.get(delivery_hub_name)
+        hubs_dict = get_all_hubs_dict()
+        pickup_hub_coords = hubs_dict.get(pickup_hub_name)
+        delivery_hub_coords = hubs_dict.get(delivery_hub_name)
         
         dist_pickup_to_hub = haversine_distance(parcel.pickup_latitude, parcel.pickup_longitude, pickup_hub_coords['lat'], pickup_hub_coords['lng'])
         dist_hub_to_delivery = haversine_distance(delivery_hub_coords['lat'], delivery_hub_coords['lng'], parcel.delivery_latitude, parcel.delivery_longitude)

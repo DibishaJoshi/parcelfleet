@@ -68,6 +68,25 @@
                         <span>Drivers / Fleet</span>
                     </a>
                 </li>
+                <li class="sidebar-nav-item {% if active_page == 'hubs' %}active{% endif %}">
+                    <a href="{{ url_for('manage_hubs') }}">
+                        <i class="fa-solid fa-warehouse"></i>
+                        <span>Hubs & Admins</span>
+                    </a>
+                </li>
+                {% elif current_user.role == 'hub_admin' %}
+                <li class="sidebar-nav-item {% if active_page == 'dashboard' %}active{% endif %}">
+                    <a href="{{ url_for('admin_dashboard') }}">
+                        <i class="fa-solid fa-chart-line"></i>
+                        <span>Dashboard</span>
+                    </a>
+                </li>
+                <li class="sidebar-nav-item {% if active_page == 'parcels' %}active{% endif %}">
+                    <a href="{{ url_for('manage_parcels') }}">
+                        <i class="fa-solid fa-box-open"></i>
+                        <span>Parcels</span>
+                    </a>
+                </li>
                 {% elif current_user.role == 'driver' %}
                 <li class="sidebar-nav-item {% if active_page == 'driver_dashboard' %}active{% endif %}">
                     <a href="{{ url_for('driver_dashboard') }}">
@@ -78,12 +97,12 @@
                 {% endif %}
             </ul>
             
-            <div class="sidebar-footer border-top border-secondary pt-3 mt-auto">
+            <!-- <div class="sidebar-footer border-top border-secondary pt-3 mt-auto">
                 <a href="{{ url_for('logout') }}" class="d-flex align-items-center gap-3 text-decoration-none text-danger" style="padding: 0.5rem 1rem;">
                     <i class="fa-solid fa-right-from-bracket"></i>
                     <span>Log Out</span>
                 </a>
-            </div>
+            </div> -->
         </aside>
 
         <!-- VIEWPORT WORKSPACE -->

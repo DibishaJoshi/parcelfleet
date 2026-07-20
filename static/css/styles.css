@@ -48,6 +48,85 @@
     --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.4), 0 4px 6px -4px rgb(0 0 0 / 0.4);
 }
 
+/* Dark theme style overrides to fix hardcoded Bootstrap utility classes and standard elements */
+[data-theme="dark"] .text-dark {
+    color: var(--text-color) !important;
+}
+[data-theme="dark"] .text-black {
+    color: var(--text-color) !important;
+}
+[data-theme="dark"] .text-muted {
+    color: var(--text-muted) !important;
+}
+[data-theme="dark"] .bg-white {
+    background-color: var(--card-bg) !important;
+}
+[data-theme="dark"] .bg-light {
+    background-color: var(--bg-color) !important;
+}
+[data-theme="dark"] .border-light {
+    border-color: var(--border-color) !important;
+}
+[data-theme="dark"] .modal-content {
+    background-color: var(--card-bg) !important;
+    color: var(--text-color) !important;
+    border-color: var(--border-color) !important;
+}
+[data-theme="dark"] .modal-header,
+[data-theme="dark"] .modal-footer {
+    border-color: var(--border-color) !important;
+}
+[data-theme="dark"] .modal-header .btn-close {
+    filter: invert(1) grayscale(100%) brightness(200%);
+}
+[data-theme="dark"] .form-control,
+[data-theme="dark"] .form-select {
+    background-color: var(--bg-color) !important;
+    color: var(--text-color) !important;
+    border-color: var(--border-color) !important;
+}
+[data-theme="dark"] .form-control:focus,
+[data-theme="dark"] .form-select:focus {
+    background-color: var(--bg-color) !important;
+    color: var(--text-color) !important;
+    border-color: var(--primary-color) !important;
+}
+[data-theme="dark"] select option {
+    background-color: var(--card-bg) !important;
+    color: var(--text-color) !important;
+}
+[data-theme="dark"] .dropdown-menu {
+    background-color: var(--card-bg) !important;
+    color: var(--text-color) !important;
+    border-color: var(--border-color) !important;
+    box-shadow: var(--shadow-lg);
+}
+[data-theme="dark"] .dropdown-item {
+    color: var(--text-color) !important;
+}
+[data-theme="dark"] .dropdown-item:hover {
+    background-color: var(--sidebar-hover) !important;
+    color: #FFFFFF !important;
+}
+[data-theme="dark"] .table-light {
+    background-color: var(--bg-color) !important;
+    color: var(--text-color) !important;
+}
+[data-theme="dark"] .card {
+    background-color: var(--card-bg) !important;
+    border-color: var(--border-color) !important;
+    color: var(--text-color) !important;
+}
+[data-theme="dark"] .list-group-item {
+    background-color: var(--card-bg) !important;
+    border-color: var(--border-color) !important;
+    color: var(--text-color) !important;
+}
+[data-theme="dark"] .text-dark i,
+[data-theme="dark"] .text-dark span {
+    color: inherit !important;
+}
+
 /* GENERAL STYLE RESETS */
 body {
     font-family: 'Inter', 'Poppins', sans-serif;

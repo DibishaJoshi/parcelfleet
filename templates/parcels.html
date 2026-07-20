@@ -1,9 +1,16 @@
 {% extends "base.html" %}
 
-{% block title %}Parcel Management - ParcelFleet{% endblock %}
-{% block page_title %}Parcel Management{% endblock %}
+{% block page_title %}{% if hub_name %}{{ hub_name }} Hub Shipments{% else %}Parcel Management{% endif %}{% endblock %}
 
 {% block content %}
+{% if hub_name %}
+<div class="alert alert-info border-0 p-3 mb-4 rounded-3 d-flex align-items-center justify-content-between text-dark" style="background-color: rgba(6, 182, 212, 0.12);">
+    <div>
+        <i class="fas fa-info-circle text-info me-2"></i>You are logged in as the Hub Admin for <strong>{{ hub_name }} Hub</strong>. Showing parcels linked to your hub.
+    </div>
+</div>
+{% endif %}
+
 <!-- CONTROL PANEL BAR -->
 <div class="premium-card py-3 mb-4 no-print">
     <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
@@ -52,39 +59,32 @@
             <thead>
                 <tr>
                     <th>Tracking ID</th>
-                    <th>Sender & Receiver</th>
-                    <th>Hub Route</th>
-                    <th>Details</th>
-                    <th>Dimensions (Volumetric)</th>
-                    <th>Charges & Payment</th>
+                    <th>From</th>
+                    <th>Recipient & Destination</th>
+                    <th>Charge & Payment</th>
                     <th>Status</th>
-                    <th class="no-print">Actions</th>
+                    <th class="no-print text-end">Actions</th>
                 </tr>
             </thead>
             <tbody>
+                {% if not parcels %}
+                <tr>
+                    <td colspan="6" class="text-center text-muted py-4">No shipments found.</td>
+                </tr>
+                {% else %}
                 {% for p in parcels %}
                 <tr data-status="{{ p.status }}" data-payment="{{ p.payment_status }}">
                     <td>
-                        <a href="{{ url_for('live_tracking_view', tracking_id=p.tracking_id) }}" class="fw-bold text-primary text-decoration-none d-block">{{ p.tracking_id }}</a>
+                        <a href="{{ url_for('parcel_details', id=p.id) }}" class="fw-bold text-primary text-decoration-none d-block">{{ p.tracking_id }}</a>
                         <small class="text-muted"><i class="far fa-clock me-1"></i>{{ p.created_at.strftime('%Y-%m-%d %H:%M') }}</small>
                     </td>
                     <td>
-                        <div class="fw-semibold">{{ p.sender_name }} <span class="text-muted" style="font-weight: normal; font-size: 0.75rem;">(Sender)</span></div>
-                        <div class="text-dark">{{ p.receiver_name }} <span class="text-muted" style="font-weight: normal; font-size: 0.75rem;">(Receiver)</span></div>
+                        <span class="badge bg-primary-subtle text-primary border-0 rounded-pill fw-semibold">{{ p.pickup_hub }} Hub</span>
                     </td>
                     <td>
-                        <span class="fw-semibold text-dark">{{ p.pickup_address }}</span>
-                        <div class="text-muted" style="font-size: 0.8rem;"><i class="fas fa-arrow-right me-1"></i>{{ p.delivery_address }}</div>
-                    </td>
-                    <td>
-                        <span class="badge bg-secondary-subtle text-dark border-0 rounded-pill mb-1 d-inline-block" style="font-size: 0.7rem;">{{ p.parcel_type }}</span>
-                        <div style="font-size: 0.75rem;">
-                            <strong>Weight:</strong> {{ p.weight }} Kg
-                        </div>
-                    </td>
-                    <td>
-                        <span class="text-dark fw-semibold" style="font-size: 0.8rem;">{{ p.length }}x{{ p.width }}x{{ p.height }} cm</span>
-                        <div class="text-muted" style="font-size: 0.75rem;">Volumetric: {{ p.volumetric_weight | round(2) }} Kg</div>
+                        <div class="text-dark fw-semibold" style="font-size: 0.85rem;">{{ p.receiver_name }}</div>
+                        <div class="text-muted" style="font-size: 0.75rem; text-overflow: ellipsis; white-space: nowrap; overflow: hidden; max-width: 250px;" title="{{ p.delivery_address }}">{{ p.delivery_address }}</div>
+                        <small class="text-muted" style="font-size: 0.7rem;"><i class="fas fa-phone me-1" style="font-size: 0.65rem;"></i>{{ p.receiver_phone }}</small>
                     </td>
                     <td>
                         <div class="fw-bold text-dark">Rs. {{ p.delivery_charge }}</div>
@@ -93,302 +93,40 @@
                         </span>
                     </td>
                     <td>
-                        <span class="status-badge {% if p.status == 'Pending' %}badge-pending{% elif p.status == 'Assigned' %}badge-assigned{% elif p.status == 'Picked Up' %}badge-pickedup{% elif p.status == 'In Transit' %}badge-intransit{% elif p.status == 'Out For Delivery' %}badge-outfordelivery{% elif p.status == 'Delivered' %}badge-delivered{% else %}badge-cancelled{% endif %}">
+                        <span class="status-badge {% if p.status == 'Pending' %}badge-pending{% elif p.status == 'Assigned' %}badge-assigned{% elif p.status == 'Picked Up' %}badge-pickedup{% elif p.status == 'In Transit' %}badge-intransit{% elif p.status == 'Out For Delivery' %}badge-outfordelivery{% elif p.status == 'Delivered' %}badge-delivered{% else %}badge-cancelled{% endif %}" style="font-size: 0.7rem;">
                             {{ p.status }}
                         </span>
                         {% if p.assigned_driver %}
-                        <div class="text-muted" style="font-size: 0.75rem; margin-top: 4px;">
-                            <i class="fas fa-motorcycle me-1"></i>{{ p.assigned_driver.name }}
+                        <div class="text-muted" style="font-size: 0.75rem; margin-top: 2px;">
+                            <i class="fas fa-motorcycle me-1 text-primary"></i>{{ p.assigned_driver.name }}
                         </div>
                         {% endif %}
                     </td>
-                    <td class="no-print">
-                        <div class="dropdown">
-                            <button class="btn btn-sm btn-outline-secondary rounded-pill dropdown-toggle" data-bs-toggle="dropdown">
-                                Actions
-                            </button>
-                            <ul class="dropdown-menu dropdown-menu-end border-0 shadow" style="border-radius: 12px; background-color: var(--card-bg);">
-                                <li><a class="dropdown-item text-dark" href="{{ url_for('live_tracking_view', tracking_id=p.tracking_id) }}"><i class="fas fa-map-location-dot me-2 text-primary"></i>Track Delivery</a></li>
-                                <li><a class="dropdown-item text-dark" href="{{ url_for('print_shipping_label', id=p.id) }}"><i class="fas fa-print me-2 text-secondary"></i>Print Label</a></li>
-                                <li><a class="dropdown-item text-dark" href="#" data-bs-toggle="modal" data-bs-target="#editParcelModal{{ p.id }}"><i class="fas fa-edit me-2 text-warning"></i>Edit Details</a></li>
-                                {% if p.status == 'Delivered' %}
-                                <li><a class="dropdown-item text-dark" href="{{ url_for('view_proof_of_delivery', id=p.id) }}"><i class="fas fa-file-invoice me-2 text-success"></i>View POD Voucher</a></li>
-                                {% endif %}
-                                {% if p.status == 'Pending' %}
-                                <li><hr class="dropdown-divider"></li>
-                                <li><a class="dropdown-item text-dark" href="#" data-bs-toggle="modal" data-bs-target="#assignDriverModal{{ p.id }}"><i class="fas fa-user-check me-2 text-info"></i>Assign Driver</a></li>
-                                <li><a class="dropdown-item text-danger" href="{{ url_for('cancel_parcel', id=p.id) }}"><i class="fas fa-ban me-2"></i>Cancel Order</a></li>
-                                {% endif %}
-                            </ul>
+                    <td class="no-print text-end">
+                        <div class="d-flex justify-content-end gap-1">
+                            <a class="btn btn-sm btn-outline-primary rounded-pill px-3" href="{{ url_for('parcel_details', id=p.id) }}">
+                                <i class="fas fa-eye me-1"></i>View
+                            </a>
+                            <div class="dropdown d-inline">
+                                <button class="btn btn-sm btn-outline-secondary rounded-pill dropdown-toggle" data-bs-toggle="dropdown">
+                                    More
+                                </button>
+                                <ul class="dropdown-menu dropdown-menu-end border-0 shadow animate-fade-in" style="border-radius: 12px; background-color: var(--card-bg); z-index: 1050;">
+                                    <li><a class="dropdown-item text-dark" href="{{ url_for('live_tracking_view', tracking_id=p.tracking_id) }}"><i class="fas fa-map-location-dot me-2 text-primary"></i>Track Delivery</a></li>
+                                    <li><a class="dropdown-item text-dark" href="{{ url_for('print_shipping_label', id=p.id) }}"><i class="fas fa-print me-2 text-secondary"></i>Print Label</a></li>
+                                    {% if p.status == 'Delivered' %}
+                                    <li><a class="dropdown-item text-dark" href="{{ url_for('view_proof_of_delivery', id=p.id) }}"><i class="fas fa-file-invoice me-2 text-success"></i>View POD Voucher</a></li>
+                                    {% endif %}
+                                    {% if p.status == 'Pending' %}
+                                    <li><a class="dropdown-item text-danger" href="{{ url_for('cancel_parcel', id=p.id) }}"><i class="fas fa-ban me-2"></i>Cancel Order</a></li>
+                                    {% endif %}
+                                </ul>
+                            </div>
                         </div>
                     </td>
                 </tr>
-
-                <!-- EDIT PARCEL DETAILS MODAL (per parcel) -->
-                <div class="modal fade" id="editParcelModal{{ p.id }}" tabindex="-1">
-                    <div class="modal-dialog modal-dialog-centered modal-lg">
-                        <div class="modal-content border-0 shadow-lg" style="border-radius: 16px; background-color: var(--card-bg);">
-                            <form method="POST" action="{{ url_for('edit_parcel', id=p.id) }}">
-                                <div class="modal-header border-bottom border-light p-4">
-                                    <h5 class="modal-title fw-bold text-dark"><i class="fas fa-edit text-warning me-2"></i>Edit Parcel: {{ p.tracking_id }}</h5>
-                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                                </div>
-                                <div class="modal-body p-4 text-dark" style="max-height: 480px; overflow-y: auto;">
-                                    
-                                    <!-- Sender Details -->
-                                    <h6 class="fw-bold text-primary mb-3"><i class="fas fa-user-arrow-up me-2"></i>Sender Details</h6>
-                                    <div class="row g-3 mb-4">
-                                        <div class="col-12 col-md-6">
-                                            <label for="sender_name_edit{{ p.id }}" class="form-label fw-semibold">Sender Full Name *</label>
-                                            <input type="text" class="form-control" name="sender_name" id="sender_name_edit{{ p.id }}" value="{{ p.sender_name }}" required>
-                                        </div>
-                                        <div class="col-12 col-md-6">
-                                            <label for="sender_phone_edit{{ p.id }}" class="form-label fw-semibold">Sender Phone Number *</label>
-                                            <input type="text" class="form-control" name="sender_phone" id="sender_phone_edit{{ p.id }}" value="{{ p.sender_phone }}" pattern="9[678]\d{8}" title="Must be a 10-digit Nepali mobile number starting with 98, 97, or 96." required>
-                                        </div>
-                                    </div>
-
-                                    <!-- Receiver Details -->
-                                    <h6 class="fw-bold text-primary mb-3"><i class="fas fa-user-arrow-down me-2"></i>Receiver Details</h6>
-                                    <div class="row g-3 mb-4">
-                                        <div class="col-12 col-md-6">
-                                            <label for="receiver_name_edit{{ p.id }}" class="form-label fw-semibold">Receiver Full Name *</label>
-                                            <input type="text" class="form-control" name="receiver_name" id="receiver_name_edit{{ p.id }}" value="{{ p.receiver_name }}" required>
-                                        </div>
-                                        <div class="col-12 col-md-6">
-                                            <label for="receiver_phone_edit{{ p.id }}" class="form-label fw-semibold">Receiver Phone Number *</label>
-                                            <input type="text" class="form-control" name="receiver_phone" id="receiver_phone_edit{{ p.id }}" value="{{ p.receiver_phone }}" pattern="9[678]\d{8}" title="Must be a 10-digit Nepali mobile number starting with 98, 97, or 96." required>
-                                        </div>
-                                    </div>
-
-                                    <!-- Route Coordinates Options -->
-                                    <h6 class="fw-bold text-primary mb-3"><i class="fas fa-map-location-dot me-2"></i>Home Delivery Route Selector</h6>
-                                    
-                                    <div class="row g-3 mb-3">
-                                        <div class="col-12 col-md-6">
-                                            <label for="pickup_address_edit{{ p.id }}" class="form-label fw-semibold">Pickup Address *</label>
-                                            <div class="input-group">
-                                                <input type="text" class="form-control" name="pickup_address" id="pickup_address_edit{{ p.id }}" value="{{ p.pickup_address }}" placeholder="e.g. Thamel, Kathmandu" required>
-                                                <button type="button" class="btn btn-outline-primary btn-search-pickup-edit" data-parcel-id="{{ p.id }}"><i class="fas fa-search-location"></i> Find</button>
-                                            </div>
-                                        </div>
-                                        <div class="col-12 col-md-6">
-                                            <label for="delivery_address_edit{{ p.id }}" class="form-label fw-semibold">Delivery Address *</label>
-                                            <div class="input-group">
-                                                <input type="text" class="form-control" name="delivery_address" id="delivery_address_edit{{ p.id }}" value="{{ p.delivery_address }}" placeholder="e.g. New Baneshwor, Kathmandu" required>
-                                                <button type="button" class="btn btn-outline-success btn-search-delivery-edit" data-parcel-id="{{ p.id }}"><i class="fas fa-search-location"></i> Find</button>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div id="modalEditMap{{ p.id }}" style="height: 220px; width: 100%; border-radius: 8px;" class="mb-3 border border-light edit-map-container" data-parcel-id="{{ p.id }}" data-pickup-lat="{{ p.pickup_latitude }}" data-pickup-lng="{{ p.pickup_longitude }}" data-delivery-lat="{{ p.delivery_latitude }}" data-delivery-lng="{{ p.delivery_longitude }}"></div>
-                                    
-                                    <div class="row g-3 mb-4">
-                                        <div class="col-6 col-md-3">
-                                            <label for="pickup_latitude_edit{{ p.id }}" class="form-label fw-semibold" style="font-size: 0.8rem;">Pickup Lat *</label>
-                                            <input type="number" step="0.000001" class="form-control" name="pickup_latitude" id="pickup_latitude_edit{{ p.id }}" value="{{ p.pickup_latitude }}" min="27.50" max="27.90" required>
-                                        </div>
-                                        <div class="col-6 col-md-3">
-                                            <label for="pickup_longitude_edit{{ p.id }}" class="form-label fw-semibold" style="font-size: 0.8rem;">Pickup Lng *</label>
-                                            <input type="number" step="0.000001" class="form-control" name="pickup_longitude" id="pickup_longitude_edit{{ p.id }}" value="{{ p.pickup_longitude }}" min="85.10" max="85.55" required>
-                                        </div>
-                                        <div class="col-6 col-md-3">
-                                            <label for="delivery_latitude_edit{{ p.id }}" class="form-label fw-semibold" style="font-size: 0.8rem;">Delivery Lat *</label>
-                                            <input type="number" step="0.000001" class="form-control" name="delivery_latitude" id="delivery_latitude_edit{{ p.id }}" value="{{ p.delivery_latitude }}" min="27.50" max="27.90" required>
-                                        </div>
-                                        <div class="col-6 col-md-3">
-                                            <label for="delivery_longitude_edit{{ p.id }}" class="form-label fw-semibold" style="font-size: 0.8rem;">Delivery Lng *</label>
-                                            <input type="number" step="0.000001" class="form-control" name="delivery_longitude" id="delivery_longitude_edit{{ p.id }}" value="{{ p.delivery_longitude }}" min="85.10" max="85.55" required>
-                                        </div>
-                                    </div>
-
-
-                                    <!-- Package Specifications -->
-                                    <h6 class="fw-bold text-primary mb-3"><i class="fas fa-cube me-2"></i>Package Specifications</h6>
-                                    <div class="row g-3 mb-3">
-                                        <div class="col-12 col-md-6">
-                                            <label for="parcel_type_edit{{ p.id }}" class="form-label fw-semibold">Parcel Category *</label>
-                                            <select class="form-select" name="parcel_type" id="parcel_type_edit{{ p.id }}" required>
-                                                {% for category in ['Others', 'Documents', 'Electronics', 'Clothing', 'Food Items', 'Fragile Goods', 'Medical Supplies'] %}
-                                                <option value="{{ category }}" {% if p.parcel_type == category %}selected{% endif %}>{{ category }}</option>
-                                                {% endfor %}
-                                            </select>
-                                        </div>
-                                        <div class="col-12 col-md-6">
-                                            <label for="parcel_weight_edit{{ p.id }}" class="form-label fw-semibold">Actual Weight (Kg) *</label>
-                                            <input type="number" step="0.01" class="form-control" name="weight" id="parcel_weight_edit{{ p.id }}" value="{{ p.weight }}" required>
-                                        </div>
-                                    </div>
-                                    
-                                    <!-- Parcel Dimensions -->
-                                    <div class="row g-3 mb-4">
-                                        <div class="col-4">
-                                            <label for="parcel_length_edit{{ p.id }}" class="form-label fw-semibold">Length (cm) *</label>
-                                            <input type="number" step="0.1" class="form-control" name="length" id="parcel_length_edit{{ p.id }}" value="{{ p.length }}" required>
-                                        </div>
-                                        <div class="col-4">
-                                            <label for="parcel_width_edit{{ p.id }}" class="form-label fw-semibold">Width (cm) *</label>
-                                            <input type="number" step="0.1" class="form-control" name="width" id="parcel_width_edit{{ p.id }}" value="{{ p.width }}" required>
-                                        </div>
-                                        <div class="col-4">
-                                            <label for="parcel_height_edit{{ p.id }}" class="form-label fw-semibold">Height (cm) *</label>
-                                            <input type="number" step="0.1" class="form-control" name="height" id="parcel_height_edit{{ p.id }}" value="{{ p.height }}" required>
-                                        </div>
-                                    </div>
-
-                                    <!-- Volumetric weight display -->
-                                    <div class="mb-4 p-2 bg-light border border-light rounded text-muted" style="font-size: 0.85rem;">
-                                        <i class="fas fa-scale-balanced me-1 text-primary"></i>Chargeable Weight: <span id="chargeable_weight_edit_display{{ p.id }}" class="fw-bold text-dark">{{ p.chargeable_weight | round(2) }} Kg</span>
-                                    </div>
-
-                                    <!-- Special Handling and Payment -->
-                                    <h6 class="fw-bold text-primary mb-3"><i class="fas fa-hand-holding-dollar me-2"></i>Handling & Status Settings</h6>
-                                    <div class="row g-3 mb-3">
-                                        <div class="col-12 col-md-6">
-                                            <label for="payment_status_edit{{ p.id }}" class="form-label fw-semibold">Payment Status *</label>
-                                            <select class="form-select" name="payment_status" required>
-                                                {% for status in ['Pending', 'Paid', 'COD'] %}
-                                                <option value="{{ status }}" {% if p.payment_status == status %}selected{% endif %}>{{ status }}</option>
-                                                {% endfor %}
-                                            </select>
-                                        </div>
-                                        <div class="col-12 col-md-6">
-                                            <label class="form-label fw-semibold">Estimated Charge (Rs.)</label>
-                                            <input type="text" class="form-control fw-bold text-dark bg-light" name="delivery_charge" id="estimated_charge_edit{{ p.id }}" value="{{ p.delivery_charge | round(0) }}">
-                                        </div>
-                                    </div>
-
-                                    <div class="row g-3 mb-4">
-                                        <div class="col-12 col-md-6">
-                                            <label for="status_edit{{ p.id }}" class="form-label fw-semibold">Parcel Status *</label>
-                                            <select class="form-select" name="status" id="status_edit{{ p.id }}" required>
-                                                {% for state in ['Pending', 'Assigned', 'Picked Up', 'In Transit', 'Out For Delivery', 'Delivered', 'Cancelled'] %}
-                                                <option value="{{ state }}" {% if p.status == state %}selected{% endif %}>{{ state }}</option>
-                                                {% endfor %}
-                                            </select>
-                                        </div>
-                                        <div class="col-12 col-md-6">
-                                            <label for="assigned_driver_id_edit{{ p.id }}" class="form-label fw-semibold">Assigned Courier Driver</label>
-                                            <select class="form-select" name="assigned_driver_id" id="assigned_driver_id_edit{{ p.id }}">
-                                                <option value="">-- Unassigned --</option>
-                                                {% for d in drivers %}
-                                                <option value="{{ d.id }}" {% if p.assigned_driver_id == d.id %}selected{% endif %}>{{ d.name }} ({{ d.availability }})</option>
-                                                {% endfor %}
-                                            </select>
-                                        </div>
-                                    </div>
-
-                                    <!-- Special Handling checkboxes -->
-                                    <div class="mb-2 mt-3">
-                                        <label class="form-label fw-semibold d-block">Special Handling Badges</label>
-                                        <div class="d-flex flex-wrap gap-3">
-                                            {% set tags_list = p.special_tags.split(', ') if p.special_tags else [] %}
-                                            <div class="form-check">
-                                                <input class="form-check-input" type="checkbox" name="special_tags" value="Fragile" id="tag_fragile_edit{{ p.id }}" {% if 'Fragile' in tags_list %}checked{% endif %}>
-                                                <label class="form-check-label" for="tag_fragile_edit{{ p.id }}">Fragile</label>
-                                            </div>
-                                            <div class="form-check">
-                                                <input class="form-check-input" type="checkbox" name="special_tags" value="Handle With Care" id="tag_care_edit{{ p.id }}" {% if 'Handle With Care' in tags_list %}checked{% endif %}>
-                                                <label class="form-check-label" for="tag_care_edit{{ p.id }}">Handle With Care</label>
-                                            </div>
-                                            <div class="form-check">
-                                                <input class="form-check-input" type="checkbox" name="special_tags" value="Express Delivery" id="tag_express_edit{{ p.id }}" {% if 'Express Delivery' in tags_list %}checked{% endif %}>
-                                                <label class="form-check-label" for="tag_express_edit{{ p.id }}">Express Delivery</label>
-                                            </div>
-                                            <div class="form-check">
-                                                <input class="form-check-input" type="checkbox" name="special_tags" value="Temperature Sensitive" id="tag_temp_edit{{ p.id }}" {% if 'Temperature Sensitive' in tags_list %}checked{% endif %}>
-                                                <label class="form-check-label" for="tag_temp_edit{{ p.id }}">Temperature Sensitive</label>
-                                            </div>
-                                            <div class="form-check">
-                                                <input class="form-check-input" type="checkbox" name="special_tags" value="Confidential Documents" id="tag_conf_edit{{ p.id }}" {% if 'Confidential Documents' in tags_list %}checked{% endif %}>
-                                                <label class="form-check-label" for="tag_conf_edit{{ p.id }}">Confidential Documents</label>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    
-                                </div>
-                                <div class="modal-footer border-top border-light p-4">
-                                    <button type="button" class="btn btn-secondary rounded-pill px-4" data-bs-dismiss="modal">Cancel</button>
-                                    <button type="submit" class="btn btn-primary rounded-pill px-4" style="background-color: var(--primary-color); border: none;">Save Changes</button>
-                                </div>
-                            </form>
-                        </div>
-                    </div>
-                </div>
-
-                <script>
-                document.addEventListener('DOMContentLoaded', function() {
-                    const editCalculator{{ p.id }} = () => {
-                        const w = parseFloat(document.getElementById('parcel_weight_edit{{ p.id }}').value) || 0;
-                        const l = parseFloat(document.getElementById('parcel_length_edit{{ p.id }}').value) || 0;
-                        const wd = parseFloat(document.getElementById('parcel_width_edit{{ p.id }}').value) || 0;
-                        const h = parseFloat(document.getElementById('parcel_height_edit{{ p.id }}').value) || 0;
-                        const type = document.getElementById('parcel_type_edit{{ p.id }}').value;
-
-                        const volWeight = (l * wd * h) / 5000;
-                        const chargeableWeight = Math.max(w, volWeight);
-
-                        document.getElementById('chargeable_weight_edit_display{{ p.id }}').textContent = 
-                            chargeableWeight.toFixed(2) + ' Kg (Volumetric: ' + volWeight.toFixed(2) + ' Kg)';
-
-                        let base = 130;
-                        let perKg = 15;
-                        if (type === 'Documents') { base = 100; perKg = 0; }
-                        else if (type === 'Electronics') { base = 200; perKg = 30; }
-                        else if (type === 'Clothing') { base = 120; perKg = 15; }
-                        else if (type === 'Food Items') { base = 150; perKg = 25; }
-                        else if (type === 'Fragile Goods') { base = 250; perKg = 40; }
-                        else if (type === 'Medical Supplies') { base = 180; perKg = 20; }
-                        else if (type === 'Others') { base = 130; perKg = 15; }
-
-                        const totalCharge = base + (chargeableWeight * perKg);
-                        document.getElementById('estimated_charge_edit{{ p.id }}').value = Math.ceil(totalCharge);
-                    };
-
-                    ['parcel_weight_edit{{ p.id }}', 'parcel_length_edit{{ p.id }}', 'parcel_width_edit{{ p.id }}', 'parcel_height_edit{{ p.id }}'].forEach(id => {
-                        const el = document.getElementById(id);
-                        if(el) el.addEventListener('input', editCalculator{{ p.id }});
-                    });
-                    const typeEl = document.getElementById('parcel_type_edit{{ p.id }}');
-                    if(typeEl) typeEl.addEventListener('change', editCalculator{{ p.id }});
-                });
-                </script>
-
-                <!-- DRIVER ASSIGNMENT MODAL (per parcel) -->
-                {% if p.status == 'Pending' %}
-                <div class="modal fade" id="assignDriverModal{{ p.id }}" tabindex="-1">
-                    <div class="modal-dialog modal-dialog-centered">
-                        <div class="modal-content border-0 shadow-lg" style="border-radius: 16px; background-color: var(--card-bg);">
-                            <form method="POST" action="{{ url_for('assign_driver_manual', id=p.id) }}">
-                                <div class="modal-header border-bottom border-light p-3">
-                                    <h5 class="modal-title fw-bold text-dark"><i class="fas fa-user-check text-primary me-2"></i>Assign Driver to {{ p.tracking_id }}</h5>
-                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                                </div>
-                                <div class="modal-body p-3 text-dark">
-                                    <p class="text-muted" style="font-size: 0.85rem;">Select an available logistics driver to manually assign to this parcel. Alternatively, run the FCFS Dispatcher on the dashboard for greedy matching.</p>
-                                    
-                                    <div class="mb-3">
-                                        <label for="driver_id" class="form-label fw-semibold">Select Driver</label>
-                                        <select class="form-select" name="driver_id" required>
-                                            <option value="">-- Choose Driver --</option>
-                                            {% for d in drivers %}
-                                            {% if d.availability == 'Available' %}
-                                            <option value="{{ d.id }}">{{ d.name }} - {{ d.vehicle_number }} ({{ d.availability }})</option>
-                                            {% endif %}
-                                            {% endfor %}
-                                        </select>
-                                    </div>
-                                </div>
-                                <div class="modal-footer border-top border-light p-3">
-                                    <button type="button" class="btn btn-secondary rounded-pill px-3" data-bs-dismiss="modal">Cancel</button>
-                                    <button type="submit" class="btn btn-primary rounded-pill px-4" style="background-color: var(--primary-color); border: none;">Assign Driver</button>
-                                </div>
-                            </form>
-                        </div>
-                    </div>
-                </div>
-                {% endif %}
                 {% endfor %}
+                {% endif %}
             </tbody>
         </table>
     </div>

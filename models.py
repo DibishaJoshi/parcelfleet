@@ -10,10 +10,11 @@ class User(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(50), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
-    role = db.Column(db.String(20), nullable=False)  # 'admin' or 'driver'
+    role = db.Column(db.String(20), nullable=False)  # 'admin', 'hub_admin', or 'driver'
     
     # Relationships
     driver_profile = db.relationship('Driver', backref='user', uselist=False, cascade="all, delete-orphan")
+    hub_admin_profile = db.relationship('HubAdmin', backref='user', uselist=False, cascade="all, delete-orphan")
 
 class Driver(db.Model):
     __tablename__ = 'drivers'
@@ -47,6 +48,8 @@ class Parcel(db.Model):
     
     pickup_address = db.Column(db.String(100), nullable=False)  # Kathmandu Hub Node
     delivery_address = db.Column(db.String(100), nullable=False)  # Kathmandu Hub Node
+    pickup_hub = db.Column(db.String(100), nullable=True)
+    delivery_hub = db.Column(db.String(100), nullable=True)
     
     pickup_latitude = db.Column(db.Float, nullable=False, default=27.7154)
     pickup_longitude = db.Column(db.Float, nullable=False, default=85.3123)
@@ -107,3 +110,24 @@ class NotificationLog(db.Model):
     message = db.Column(db.String(255), nullable=False)
     type = db.Column(db.String(30), nullable=False)  # 'Created', 'Assigned', 'Picked Up', 'Out For Delivery', 'Delivered', 'Failed'
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+
+class Hub(db.Model):
+    __tablename__ = 'hubs'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), unique=True, nullable=False)
+    latitude = db.Column(db.Float, nullable=False)
+    longitude = db.Column(db.Float, nullable=False)
+    
+    # Relationships
+    hub_admins = db.relationship('HubAdmin', backref='hub', cascade="all, delete-orphan")
+
+class HubAdmin(db.Model):
+    __tablename__ = 'hub_admins'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    name = db.Column(db.String(100), nullable=False)
+    phone = db.Column(db.String(20), nullable=False, unique=True)
+    email = db.Column(db.String(100), nullable=True, unique=True)
+    hub_id = db.Column(db.Integer, db.ForeignKey('hubs.id'), nullable=False)

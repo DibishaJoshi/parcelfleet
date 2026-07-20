@@ -69,13 +69,66 @@ def get_road_data(u, v):
     fallback = {'condition': 'Normal road conditions', 'traffic': 'Moderate', 'factor': 1.2, 'speed_limit': 40}
     return ROAD_CONDITIONS.get(key, fallback)
 
+def get_all_hubs_dict():
+    """
+    Combines the static HUBS dictionary with dynamic hubs registered in the database.
+    """
+    all_hubs = dict(HUBS)
+    try:
+        from models import Hub
+        db_hubs = Hub.query.all()
+        for h in db_hubs:
+            all_hubs[h.name] = {'lat': h.latitude, 'lng': h.longitude}
+    except Exception:
+        pass
+    return all_hubs
+
+def get_dynamic_graph():
+    """
+    Builds a copy of GRAPH, linking dynamically registered hubs from the database
+    to their closest neighbor in the existing network.
+    """
+    dynamic_graph = {node: dict(edges) for node, edges in GRAPH.items()}
+    try:
+        from models import Hub
+        db_hubs = Hub.query.all()
+        # Find hubs that are not in the static GRAPH
+        dynamic_hub_records = [h for h in db_hubs if h.name not in GRAPH]
+        
+        if dynamic_hub_records:
+            all_hubs = get_all_hubs_dict()
+            for h in dynamic_hub_records:
+                closest_neighbor = None
+                min_dist = float('inf')
+                for other_name, coords in all_hubs.items():
+                    if other_name != h.name and other_name in GRAPH:
+                        dist = haversine_distance(h.latitude, h.longitude, coords['lat'], coords['lng'])
+                        if dist < min_dist:
+                            min_dist = dist
+                            closest_neighbor = other_name
+                
+                if closest_neighbor:
+                    # Inject bidirectional edge
+                    if h.name not in dynamic_graph:
+                        dynamic_graph[h.name] = {}
+                    dynamic_graph[h.name][closest_neighbor] = min_dist
+                    
+                    if closest_neighbor not in dynamic_graph:
+                        dynamic_graph[closest_neighbor] = {}
+                    dynamic_graph[closest_neighbor][h.name] = min_dist
+    except Exception:
+        pass
+    return dynamic_graph
+
 def dijkstra(start, end):
     """
     Dijkstra's Shortest Path Algorithm on Kathmandu Valley Hub Network,
     weighted by dynamic traffic and road conditions.
     Returns: (path_list, total_distance)
     """
-    if start not in GRAPH or end not in GRAPH:
+    dynamic_graph = get_dynamic_graph()
+    
+    if start not in dynamic_graph or end not in dynamic_graph:
         return None, float('inf')
         
     queue = [(0, start, [start])]
@@ -91,10 +144,10 @@ def dijkstra(start, end):
             # Return path and the actual physical distance in km
             real_dist = 0.0
             for i in range(len(path) - 1):
-                real_dist += GRAPH[path[i]][path[i+1]]
+                real_dist += dynamic_graph[path[i]][path[i+1]]
             return path, real_dist
             
-        for next_node, weight in GRAPH.get(current, {}).items():
+        for next_node, weight in dynamic_graph.get(current, {}).items():
             if next_node not in seen:
                 road_data = get_road_data(current, next_node)
                 # Weighted edge cost adjusted by traffic multiplier
@@ -133,11 +186,12 @@ def get_route_segments(path, pickup_coords=None, delivery_coords=None):
     Uses real road geometry coordinates fetched from OSM Routing API.
     """
     segments = []
+    all_hubs = get_all_hubs_dict()
     
     # 1. Home Pickup to Closest Hub leg
     if pickup_coords and len(path) > 0:
         hub_name = path[0]
-        hub_info = HUBS.get(hub_name)
+        hub_info = all_hubs.get(hub_name)
         if hub_info:
             segments.append({
                 'from': 'Home Pickup',
@@ -153,8 +207,8 @@ def get_route_segments(path, pickup_coords=None, delivery_coords=None):
     for i in range(len(path) - 1):
         u = path[i]
         v = path[i+1]
-        u_info = HUBS.get(u)
-        v_info = HUBS.get(v)
+        u_info = all_hubs.get(u)
+        v_info = all_hubs.get(v)
         
         if u_info and v_info:
             road_data = get_road_data(u, v)
@@ -181,7 +235,7 @@ def get_route_segments(path, pickup_coords=None, delivery_coords=None):
     # 3. Closest Hub to Home Delivery leg
     if delivery_coords and len(path) > 0:
         hub_name = path[-1]
-        hub_info = HUBS.get(hub_name)
+        hub_info = all_hubs.get(hub_name)
         if hub_info:
             segments.append({
                 'from': f"{hub_name} Hub",
@@ -202,12 +256,14 @@ def greedy_driver_assignment(parcel, available_drivers):
     to the parcel's pickup hub coordinate.
     Returns: (driver_object, distance) or (None, None)
     """
-    pickup_hub = HUBS.get(parcel.pickup_address)
+    all_hubs = get_all_hubs_dict()
+    pickup_hub = all_hubs.get(parcel.pickup_hub)
     if not pickup_hub:
-        return None, None
-        
-    pickup_lat = pickup_hub['lat']
-    pickup_lng = pickup_hub['lng']
+        pickup_lat = parcel.pickup_latitude
+        pickup_lng = parcel.pickup_longitude
+    else:
+        pickup_lat = pickup_hub['lat']
+        pickup_lng = pickup_hub['lng']
     
     closest_driver = None
     min_distance = float('inf')
@@ -227,9 +283,10 @@ def get_route_coordinates(path):
     Transforms a list of hub names into a list of lat/lng coordinate dicts
     for Leaflet map rendering.
     """
+    all_hubs = get_all_hubs_dict()
     coords = []
     for hub_name in path:
-        hub_info = HUBS.get(hub_name)
+        hub_info = all_hubs.get(hub_name)
         if hub_info:
             coords.append({'name': hub_name, 'lat': hub_info['lat'], 'lng': hub_info['lng']})
     return coords
@@ -238,9 +295,10 @@ def get_closest_hub(lat, lng):
     """
     Find the closest Kathmandu Valley hub name based on spatial distance.
     """
+    all_hubs = get_all_hubs_dict()
     closest = None
     min_dist = float('inf')
-    for name, coords in HUBS.items():
+    for name, coords in all_hubs.items():
         dist = haversine_distance(lat, lng, coords['lat'], coords['lng'])
         if dist < min_dist:
             min_dist = dist

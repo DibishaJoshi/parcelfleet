@@ -21,12 +21,20 @@
                 </select>
             </div>
             
-            <div class="form-check form-switch d-flex align-items-center justify-content-between p-0 mb-2">
+            <div class="form-check form-switch d-flex align-items-center justify-content-between p-0 mb-3">
                 <div>
                     <label class="form-check-label fw-bold" for="shareLocationToggle" style="font-size: 1rem;">Share Live GPS Location</label>
-                    <small class="d-block text-white text-opacity-70" style="font-size: 0.75rem;">Simulates traversal along Dijkstra path points</small>
+                    <small class="d-block text-white text-opacity-70" style="font-size: 0.75rem;">Broadcast coordinates to admin & customers</small>
                 </div>
                 <input class="form-check-input ms-0" type="checkbox" role="switch" id="shareLocationToggle" data-driver-id="{{ driver.id }}" style="width: 50px; height: 26px; cursor: pointer;">
+            </div>
+            
+            <div class="form-check form-switch d-flex align-items-center justify-content-between p-0 mb-0">
+                <div>
+                    <label class="form-check-label fw-bold" for="simulateMovementToggle" style="font-size: 1rem;">Simulate Active Transit</label>
+                    <small class="d-block text-white text-opacity-70" style="font-size: 0.75rem;">Simulate movement traversal along the route</small>
+                </div>
+                <input class="form-check-input ms-0" type="checkbox" role="switch" id="simulateMovementToggle" style="width: 50px; height: 26px; cursor: pointer;">
             </div>
         </div>
 

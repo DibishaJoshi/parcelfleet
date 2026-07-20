@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 import random
 
 # Import db and models
-from models import db, User, Driver, Parcel, TrackingHistory, NotificationLog
+from models import db, User, Driver, Parcel, TrackingHistory, NotificationLog, Hub, HubAdmin
 from app import app  # Import app to use its database context
 
 def seed_database():
@@ -38,9 +38,39 @@ def seed_database():
             role='driver'
         )
         db.session.add(driver2_user)
+
+        # Hub Admin User
+        hubadmin1_user = User(
+            username='hubadmin1',
+            password_hash=generate_password_hash('hub123'),
+            role='hub_admin'
+        )
+        db.session.add(hubadmin1_user)
         
         db.session.commit()
         print("Users seeded successfully!")
+
+        # Seed Hubs
+        from algorithms import HUBS, get_closest_hub
+        seeded_hubs = {}
+        for hub_name, coords in HUBS.items():
+            hub = Hub(name=hub_name, latitude=coords['lat'], longitude=coords['lng'])
+            db.session.add(hub)
+            seeded_hubs[hub_name] = hub
+        db.session.commit()
+        print("Hubs seeded successfully!")
+
+        # Seed Hub Admin Profile
+        hub_admin_profile = HubAdmin(
+            user_id=hubadmin1_user.id,
+            name='Anup Dahal',
+            phone='9867123456',
+            email='anup@parcelfleet.com',
+            hub_id=seeded_hubs['Kalanki'].id
+        )
+        db.session.add(hub_admin_profile)
+        db.session.commit()
+        print("Hub admin profile seeded successfully!")
         
         # 2. Create Drivers
         # Driver 1 Profile (Suman Thapa - positioned at Kalanki)
@@ -90,6 +120,8 @@ def seed_database():
             pickup_longitude=85.4300,
             delivery_latitude=27.7180,
             delivery_longitude=85.3150,
+            pickup_hub=get_closest_hub(27.6740, 85.4300),
+            delivery_hub=get_closest_hub(27.7180, 85.3150),
             parcel_type='Documents',
             weight=0.5,
             length=15.0,
@@ -116,6 +148,8 @@ def seed_database():
             pickup_longitude=85.2835,
             delivery_latitude=27.6900,
             delivery_longitude=85.3360,
+            pickup_hub=get_closest_hub(27.6965, 85.2835),
+            delivery_hub=get_closest_hub(27.6900, 85.3360),
             parcel_type='Electronics',
             weight=2.5,
             length=30.0,
@@ -143,6 +177,8 @@ def seed_database():
             pickup_longitude=85.3200,
             delivery_latitude=27.6790,
             delivery_longitude=85.3505,
+            pickup_hub=get_closest_hub(27.6650, 85.3200),
+            delivery_hub=get_closest_hub(27.6790, 85.3505),
             parcel_type='Medical Supplies',
             weight=1.2,
             length=10.0,

@@ -194,13 +194,18 @@ document.addEventListener('DOMContentLoaded', function () {
         };
 
         const runSimulationFallback = (state) => {
+            const simulateToggle = document.getElementById('simulateMovementToggle');
+            const isSimulating = simulateToggle ? simulateToggle.checked : false;
+
             if (pathCoordinates.length > 0) {
                 // Traversal along Dijkstra path simulation
                 const currentCoord = pathCoordinates[pathIndex];
                 sendLocationUpdate(currentCoord.lat, currentCoord.lng, state);
                 
-                // Move to next node in path
-                pathIndex = (pathIndex + 1) % pathCoordinates.length;
+                if (isSimulating) {
+                    // Move to next node in path
+                    pathIndex = (pathIndex + 1) % pathCoordinates.length;
+                }
             } else {
                 // Keep current database coordinates (do not force reset to Thamel)
                 sendLocationUpdate(null, null, state);
@@ -264,6 +269,22 @@ document.addEventListener('DOMContentLoaded', function () {
                     startSharing();
                 }
             }, 1500);
+        }
+
+        // Restore simulate toggle state from localStorage
+        const simulateToggle = document.getElementById('simulateMovementToggle');
+        if (simulateToggle) {
+            const storedSimulateState = localStorage.getItem('simulateLocation_' + driverId);
+            if (storedSimulateState === 'true') {
+                simulateToggle.checked = true;
+            } else {
+                simulateToggle.checked = false;
+            }
+            
+            simulateToggle.addEventListener('change', function () {
+                localStorage.setItem('simulateLocation_' + driverId, this.checked ? 'true' : 'false');
+                console.log('Simulate active transit state changed to: ', this.checked);
+            });
         }
 
         // Automatic GPS sync check on startup (only if location sharing is active)

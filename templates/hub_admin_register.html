@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+
+{% block title %}Hub Admin Registration - ParcelFleet{% endblock %}
+
+{% block full_content %}
+<div class="login-screen">
+    <!-- LEFT PANEL: PREMIUM LOGISTICS GRAPHICS -->
+    <div class="login-left">
+        <div class="login-brand">
+            <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect x="6" y="24" width="34" height="24" rx="4" fill="#3B82F6"/>
+                <path d="M40 28H48L56 36V48H40V28Z" fill="#60A5FA"/>
+                <circle cx="16" cy="50" r="6" fill="#F8FAFC" stroke="#1E293B" stroke-width="3"/>
+                <circle cx="48" cy="50" r="6" fill="#F8FAFC" stroke="#1E293B" stroke-width="3"/>
+                <rect x="12" y="16" width="16" height="8" rx="2" fill="#2563EB"/>
+            </svg>
+            <h1>ParcelFleet</h1>
+        </div>
+        
+        <div class="truck-animation mb-4">
+            <svg viewBox="0 0 200 120" fill="none" xmlns="http://www.w3.org/2000/svg" width="100%" height="100%">
+                <rect x="20" y="40" width="110" height="60" rx="6" fill="#2563EB" />
+                <path d="M130 50H160L185 75V100H130V50Z" fill="#60A5FA" />
+                <rect x="140" y="55" width="22" height="16" fill="#1E293B" />
+                <circle cx="50" cy="105" r="14" fill="#1E293B" stroke="#F8FAFC" stroke-width="4"/>
+                <circle cx="150" cy="105" r="14" fill="#1E293B" stroke="#F8FAFC" stroke-width="4"/>
+                <line x1="5" y1="50" x2="15" y2="50" stroke="#F8FAFC" stroke-width="3" stroke-linecap="round"/>
+                <line x1="-5" y1="65" x2="10" y2="65" stroke="#60A5FA" stroke-width="3" stroke-linecap="round"/>
+                <line x1="2" y1="80" x2="12" y2="80" stroke="#F8FAFC" stroke-width="3" stroke-linecap="round"/>
+            </svg>
+        </div>
+
+        <h2 class="login-tagline">Manage Your Station</h2>
+        <p class="login-sub">Create your hub manager login credentials. Ensure your profile has been added by the system administrator with your phone number or email before proceeding.</p>
+        
+        <div class="d-flex gap-3 no-print z-10">
+            <a href="{{ url_for('login') }}" class="btn btn-outline-light rounded-pill px-4" style="border-width: 2px;">
+                <i class="fas fa-arrow-left me-2"></i>Back to Sign In
+            </a>
+        </div>
+    </div>
+
+    <!-- RIGHT PANEL: REGISTRATION INTERACTIVE FORM -->
+    <div class="login-right">
+        <div class="login-form-container" style="max-width: 440px;">
+            <div class="text-center text-md-start">
+                <h2 class="login-form-title">Hub Admin Registration</h2>
+                <p class="login-form-subtitle">Create your hub manager account by entering your registered phone number or email.</p>
+            </div>
+            
+            <!-- Flask Message Box -->
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="alert alert-{% if category == 'error' %}danger{% else %}{{ category }}{% endif %} border-0 p-3 mb-3" style="border-radius: 12px;">
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+
+            <div class="glass-card">
+                <form method="POST" action="{{ url_for('hub_admin_register') }}">
+                    <!-- Registered phone or email -->
+                    <div class="mb-3">
+                        <label for="identifier" class="form-label text-dark fw-semibold" style="font-size: 0.85rem;">Registered Mobile Phone or Email</label>
+                        <div class="input-group">
+                            <span class="input-group-text border-end-0 bg-transparent text-muted"><i class="fa-regular fa-address-card"></i></span>
+                            <input type="text" class="form-control border-start-0 ps-0" id="identifier" name="identifier" placeholder="e.g. 9841234567 or suman@parcelfleet.com" required style="border-radius: 0 var(--border-radius-sm) var(--border-radius-sm) 0;">
+                        </div>
+                    </div>
+                    
+                    <!-- Username -->
+                    <div class="mb-3">
+                        <label for="username" class="form-label text-dark fw-semibold" style="font-size: 0.85rem;">Choose Username</label>
+                        <div class="input-group">
+                            <span class="input-group-text border-end-0 bg-transparent text-muted"><i class="fa-regular fa-user"></i></span>
+                            <input type="text" class="form-control border-start-0 ps-0" id="username" name="username" placeholder="e.g. hub_suman" required style="border-radius: 0 var(--border-radius-sm) var(--border-radius-sm) 0;">
+                        </div>
+                    </div>
+                    
+                    <!-- Password -->
+                    <div class="mb-3">
+                        <label for="password" class="form-label text-dark fw-semibold" style="font-size: 0.85rem;">Choose Password</label>
+                        <div class="input-group">
+                            <span class="input-group-text border-end-0 bg-transparent text-muted"><i class="fa-solid fa-lock"></i></span>
+                            <input type="password" class="form-control border-start-0 ps-0" id="password" name="password" placeholder="••••••••" required style="border-radius: 0 var(--border-radius-sm) var(--border-radius-sm) 0;">
+                        </div>
+                    </div>
+
+                    <!-- Confirm Password -->
+                    <div class="mb-4">
+                        <label for="confirm_password" class="form-label text-dark fw-semibold" style="font-size: 0.85rem;">Confirm Password</label>
+                        <div class="input-group">
+                            <span class="input-group-text border-end-0 bg-transparent text-muted"><i class="fa-solid fa-shield-halved"></i></span>
+                            <input type="password" class="form-control border-start-0 ps-0" id="confirm_password" name="confirm_password" placeholder="••••••••" required style="border-radius: 0 var(--border-radius-sm) var(--border-radius-sm) 0;">
+                        </div>
+                    </div>
+                    
+                    <!-- Submit Button -->
+                    <button type="submit" class="btn btn-primary w-100 rounded-pill py-2.5 fw-bold mb-3" style="background-color: var(--primary-color); border: none; font-size: 0.95rem;">
+                        Register Hub Admin Account <i class="fas fa-user-plus ms-2"></i>
+                    </button>
+
+                    <div class="text-center">
+                        <a href="{{ url_for('login') }}" class="text-decoration-none text-primary fw-semibold" style="font-size: 0.85rem;">Already have an account? Sign In</a>
+                    </div>
+                </form>
+            </div>
+            
+            <div class="text-center mt-4">
+                <span class="text-muted" style="font-size: 0.8rem;">BCA Final Year Project Demonstration.</span>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

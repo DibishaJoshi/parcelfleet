@@ -90,7 +90,7 @@
                                 Remember Me
                             </label>
                         </div>
-                        <a href="#" class="text-decoration-none text-primary" style="font-size: 0.85rem;">Forgot Password?</a>
+                        <a href="{{ url_for('forgot_password') }}" class="text-decoration-none text-primary" style="font-size: 0.85rem;">Forgot Password?</a>
                     </div>
                     
                     <!-- Sign In Button -->
@@ -98,15 +98,14 @@
                         Sign In <i class="fas fa-arrow-right ms-2"></i>
                     </button>
 
-                    <div class="text-center">
+                    <div class="text-center d-flex flex-column gap-1">
                         <a href="{{ url_for('driver_register') }}" class="text-decoration-none text-primary fw-semibold" style="font-size: 0.85rem;">New Driver? Register your account</a>
+                        <a href="{{ url_for('hub_admin_register') }}" class="text-decoration-none text-info fw-semibold" style="font-size: 0.85rem;">New Hub Admin? Register your account</a>
                     </div>
                 </form>
             </div>
             
-            <div class="text-center mt-4">
-                <span class="text-muted" style="font-size: 0.8rem;">BCA Final Year Project Demonstration.</span>
-            </div>
+           
         </div>
     </div>
 </div>

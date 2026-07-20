@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
 {% block title %}Admin Console - ParcelFleet{% endblock %}
-{% block page_title %}Admin Dashboard{% endblock %}
+{% block page_title %}{% if hub_name %}{{ hub_name }} Hub Dashboard{% else %}Admin Dashboard{% endif %}{% endblock %}
 
 {% block content %}
 <!-- KPI METRIC CARDS GRID -->
@@ -12,7 +12,7 @@
             <div class="kpi-details">
                 <h6>Total Revenue</h6>
                 <h3 class="fw-bold">Rs. {{ stats.total_revenue }}</h3>
-                <div class="kpi-trend up"><i class="fas fa-caret-up"></i> +12% vs last week</div>
+                <!-- <div class="kpi-trend up"><i class="fas fa-caret-up"></i> +12% vs last week</div> -->
             </div>
             <div class="kpi-icon blue"><i class="fas fa-wallet"></i></div>
         </div>
@@ -24,7 +24,7 @@
             <div class="kpi-details">
                 <h6>Today's Bookings</h6>
                 <h3 class="fw-bold">{{ stats.today_bookings }}</h3>
-                <div class="kpi-trend up"><i class="fas fa-caret-up"></i> +18% vs yesterday</div>
+                <!-- <div class="kpi-trend up"><i class="fas fa-caret-up"></i> +18% vs yesterday</div> -->
             </div>
             <div class="kpi-icon green"><i class="fas fa-cubes"></i></div>
         </div>
@@ -36,7 +36,7 @@
             <div class="kpi-details">
                 <h6>Active Fleet</h6>
                 <h3 class="fw-bold">{{ stats.active_drivers }}</h3>
-                <div class="kpi-trend"><span class="badge bg-success-subtle text-success">85% Available</span></div>
+                <!-- <div class="kpi-trend"><span class="badge bg-success-subtle text-success">85% Available</span></div> -->
             </div>
             <div class="kpi-icon purple"><i class="fas fa-motorcycle"></i></div>
         </div>
@@ -48,7 +48,7 @@
             <div class="kpi-details">
                 <h6>Failed Attempts</h6>
                 <h3 class="fw-bold text-danger">{{ stats.failed_attempts }}</h3>
-                <div class="kpi-trend down"><i class="fas fa-caret-down"></i> -4.2% rate</div>
+                <!-- <div class="kpi-trend down"><i class="fas fa-caret-down"></i> -4.2% rate</div> -->
             </div>
             <div class="kpi-icon red"><i class="fas fa-exclamation-triangle"></i></div>
         </div>
@@ -66,24 +66,30 @@
         </div>
     </div>
     
-    <!-- Card 6: Average Transit Duration -->
+    <!-- Card 6: Average Transit Duration-->
     <div class="col">
         <div class="kpi-card">
             <div class="kpi-details">
                 <h6>Avg Transit</h6>
-                <h3 class="fw-bold">{{ stats.avg_time }} Min</h3>
-                <div class="kpi-trend up"><i class="fas fa-bolt text-success"></i> Highly Optimized</div>
+                <!-- <h3 class="fw-bold">{{ stats.avg_time }} Min</h3>
+                <div class="kpi-trend up"><i class="fas fa-bolt text-success"></i> Highly Optimized</div>  -->
             </div>
             <div class="kpi-icon blue"><i class="fas fa-stopwatch"></i></div>
         </div>
     </div>
-</div>
+</div> 
 
 <!-- ACTIONS BAR -->
 <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4 no-print">
     <div class="d-flex align-items-center gap-2">
-        <h5 class="fw-bold text-dark mb-0">Operational Operations Hub</h5>
-        <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill">Seeded active</span>
+        <h5 class="fw-bold text-dark mb-0">
+            {% if hub_name %}
+            Operational Hub: {{ hub_name }} Hub Control
+            {% else %}
+            Operational Operations Hub
+            {% endif %}
+        </h5>
+        <!-- <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill">Seeded active</span> -->
     </div>
     <div class="d-flex align-items-center gap-2">
         <!-- FCFS Dispatch Trigger Button -->
@@ -188,67 +194,60 @@
             <thead>
                 <tr>
                     <th>Tracking ID</th>
-                    <th>Sender & Receiver</th>
-                    <th>Hub Route</th>
-                    <th>Specifications</th>
-                    <th>Pricing & Payment</th>
-                    <th>Courier Driver</th>
-                    <th>Delivery Status</th>
-                    <th class="no-print">Actions</th>
+                    <th>From</th>
+                    <th>To</th>
+                    <th>Charge</th>
+                    <th>Courier</th>
+                    <th>Status</th>
+                    <th class="no-print text-end">Actions</th>
                 </tr>
             </thead>
             <tbody>
+                {% if not recent_parcels %}
+                <tr>
+                    <td colspan="7" class="text-center text-muted py-4">No recent bookings.</td>
+                </tr>
+                {% else %}
                 {% for p in recent_parcels %}
                 <tr data-status="{{ p.status }}" data-payment="{{ p.payment_status }}">
                     <td>
-                        <a href="{{ url_for('live_tracking_view', tracking_id=p.tracking_id) }}" class="fw-bold text-primary text-decoration-none d-block">{{ p.tracking_id }}</a>
-                        <small class="text-muted">{{ p.created_at.strftime('%Y-%m-%d %H:%M') }}</small>
+                        <a href="{{ url_for('parcel_details', id=p.id) }}" class="fw-bold text-primary text-decoration-none d-block">{{ p.tracking_id }}</a>
+                        <small class="text-muted"><i class="far fa-clock me-1"></i>{{ p.created_at.strftime('%m-%d %H:%M') }}</small>
                     </td>
                     <td>
-                        <div class="fw-semibold"><i class="fas fa-paper-plane me-1 text-muted" style="width: 14px;"></i>{{ p.sender_name }}</div>
-                        <div class="text-muted"><i class="fas fa-user-tag me-1 text-muted" style="width: 14px;"></i>{{ p.receiver_name }}</div>
+                        <span class="badge bg-primary-subtle text-primary border-0 rounded-pill fw-semibold" style="font-size: 0.75rem;">{{ p.pickup_hub }} Hub</span>
                     </td>
                     <td>
-                        <span class="d-block fw-semibold text-dark">{{ p.pickup_address }}</span>
-                        <small class="text-muted"><i class="fas fa-arrow-right me-1"></i>{{ p.delivery_address }}</small>
+                        <span class="text-dark fw-semibold" style="font-size: 0.85rem; max-width: 150px; text-overflow: ellipsis; white-space: nowrap; overflow: hidden; display: inline-block;" title="{{ p.delivery_address }}">{{ p.delivery_address }}</span>
                     </td>
                     <td>
-                        <span class="badge bg-secondary-subtle text-dark border-0 rounded-pill" style="font-size: 0.7rem;">{{ p.parcel_type }}</span>
-                        <div class="text-muted" style="font-size: 0.75rem; margin-top: 2px;">{{ p.chargeable_weight | round(2) }} kg (Chargeable)</div>
-                    </td>
-                    <td>
-                        <div class="fw-semibold">Rs. {{ p.delivery_charge }}</div>
-                        <span class="badge bg-{% if p.payment_status == 'Paid' %}success-subtle text-success{% elif p.payment_status == 'COD' %}warning-subtle text-warning{% else %}danger-subtle text-danger{% endif %} border-0 rounded-pill" style="font-size: 0.65rem;">
+                        <div class="fw-bold text-dark" style="font-size: 0.85rem;">Rs. {{ p.delivery_charge | round(0) }}</div>
+                        <span class="badge bg-{% if p.payment_status == 'Paid' %}success-subtle text-success{% elif p.payment_status == 'COD' %}warning-subtle text-warning{% else %}danger-subtle text-danger{% endif %} border-0 rounded-pill" style="font-size: 0.6rem;">
                             {{ p.payment_status }}
                         </span>
                     </td>
                     <td>
                         {% if p.assigned_driver %}
-                        <div class="fw-semibold">{{ p.assigned_driver.name }}</div>
-                        <small class="text-muted">{{ p.assigned_driver.phone }}</small>
+                        <div class="fw-semibold text-dark" style="font-size: 0.85rem;">{{ p.assigned_driver.name }}</div>
                         {% else %}
-                        <span class="text-danger fw-semibold" style="font-size: 0.8rem;"><i class="fas fa-user-slash me-1"></i>Unassigned</span>
+                        <span class="text-muted" style="font-size: 0.8rem;">Unassigned</span>
                         {% endif %}
                     </td>
                     <td>
-                        <span class="status-badge {% if p.status == 'Pending' %}badge-pending{% elif p.status == 'Assigned' %}badge-assigned{% elif p.status == 'Picked Up' %}badge-pickedup{% elif p.status == 'In Transit' %}badge-intransit{% elif p.status == 'Out For Delivery' %}badge-outfordelivery{% elif p.status == 'Delivered' %}badge-delivered{% else %}badge-cancelled{% endif %}">
+                        <span class="status-badge {% if p.status == 'Pending' %}badge-pending{% elif p.status == 'Assigned' %}badge-assigned{% elif p.status == 'Picked Up' %}badge-pickedup{% elif p.status == 'In Transit' %}badge-intransit{% elif p.status == 'Out For Delivery' %}badge-outfordelivery{% elif p.status == 'Delivered' %}badge-delivered{% else %}badge-cancelled{% endif %}" style="font-size: 0.65rem;">
                             {{ p.status }}
                         </span>
-                        {% if p.delivery_attempts > 0 %}
-                        <small class="d-block text-danger mt-1" style="font-size: 0.7rem;">(Attempts: {{ p.delivery_attempts }})</small>
-                        {% endif %}
                     </td>
-                    <td class="no-print">
-                        <div class="d-flex gap-1">
-                            <a href="{{ url_for('print_shipping_label', id=p.id) }}" class="btn btn-sm btn-outline-secondary rounded-pill" title="Print Shipping Label"><i class="fas fa-print"></i></a>
-                            {% if p.status == 'Delivered' %}
-                            <a href="{{ url_for('view_proof_of_delivery', id=p.id) }}" class="btn btn-sm btn-outline-success rounded-pill" title="View Delivery Voucher"><i class="fas fa-file-invoice"></i></a>
-                            {% endif %}
-                            <a href="{{ url_for('live_tracking_view', tracking_id=p.tracking_id) }}" class="btn btn-sm btn-outline-primary rounded-pill" title="Track Live Route"><i class="fas fa-map-location-dot"></i></a>
+                    <td class="no-print text-end">
+                        <div class="d-flex justify-content-end gap-1">
+                            <a class="btn btn-sm btn-outline-primary rounded-pill px-3" style="font-size: 0.75rem;" href="{{ url_for('parcel_details', id=p.id) }}">
+                                <i class="fas fa-eye me-1"></i>View
+                            </a>
                         </div>
                     </td>
                 </tr>
                 {% endfor %}
+                {% endif %}
             </tbody>
         </table>
     </div>

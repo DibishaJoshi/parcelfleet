@@ -1,148 +1,140 @@
 {% extends "base.html" %}
 
 {% block title %}Fleet & Drivers - ParcelFleet{% endblock %}
+
 {% block page_title %}Driver Fleet Directory{% endblock %}
 
 {% block content %}
 <div class="row g-4">
-    <!-- LEFT SIDE: DRIVER DIRECTORY CARDS -->
-    <div class="col-12 col-xl-5">
-        <div class="d-flex align-items-center justify-content-between mb-3 no-print">
-            <h5 class="fw-bold text-dark mb-0">Active Driver Rosters</h5>
-            <div class="d-flex gap-2">
+    <!-- LEFT SIDE: DRIVER DIRECTORY TABLE -->
+    <div class="col-12 col-xl-7">
+        <div class="premium-card border border-light shadow-sm mb-0">
+            <div class="premium-card-title d-flex justify-content-between align-items-center">
+                <span><i class="fa-solid fa-motorcycle me-2 text-primary"></i>Active Driver Rosters ({{ drivers|length }})</span>
                 <button class="btn btn-sm btn-primary rounded-pill px-3" data-bs-toggle="modal" data-bs-target="#addDriverModal" style="background-color: var(--primary-color); border: none;">
                     <i class="fas fa-plus me-1"></i>Add Driver
                 </button>
-                <span class="badge bg-secondary-subtle text-dark border-0 rounded-pill">{{ drivers | length }} Registered</span>
             </div>
-        </div>
-        
-        <div class="row row-cols-1 g-3">
-            {% for d in drivers %}
-            <div class="col">
-                <div class="kpi-card border border-light p-3 h-100 flex-row justify-content-start align-items-start gap-3">
-                    <!-- High-End Circle Initial Avatar -->
-                    <div class="bg-primary text-white rounded-circle d-flex align-items-center justify-content-center fw-bold" style="width: 52px; height: 52px; font-size: 1.25rem; flex-shrink: 0;">
-                        {{ d.name[0].upper() }}
-                    </div>
-                    
-                    <!-- Driver Core Stats -->
-                    <div class="flex-grow-1">
-                        <div class="d-flex align-items-center justify-content-between mb-1">
-                            <h6 class="fw-bold mb-0 text-dark" style="font-size: 1rem;">{{ d.name }}</h6>
-                            <span class="driver-badge {% if d.availability == 'Available' %}badge-available{% elif d.availability == 'On Delivery' %}badge-ondelivery{% elif d.availability == 'On Break' %}badge-onbreak{% else %}badge-offline{% endif %}">
-                                {{ d.availability }}
-                            </span>
-                        </div>
-                        
-                        <div class="text-muted" style="font-size: 0.8rem; margin-bottom: 0.75rem;">
-                            <div class="mb-1">
-                                <span class="me-3"><i class="fas fa-motorcycle me-1 text-primary"></i>{{ d.vehicle_number }}</span>
-                                <span class="me-3"><i class="fas fa-phone me-1 text-primary"></i>{{ d.phone }}</span>
-                            </div>
-                            {% if d.email %}
-                            <div class="mb-1">
-                                <span><i class="fas fa-envelope me-1 text-primary"></i>{{ d.email }}</span>
-                            </div>
-                            {% endif %}
-                            <div class="mt-2 p-2 bg-light rounded text-dark border border-light" style="font-size: 0.75rem;">
-                                <i class="fas fa-location-dot text-danger me-1"></i><strong>Live GPS:</strong> 
-                                <span class="text-primary fw-semibold">{{ d.latitude | round(4) }}, {{ d.longitude | round(4) }}</span>
+            
+            <div class="table-responsive" style="max-height: 480px; overflow-y: auto;">
+                <table class="table premium-table align-middle">
+                    <thead>
+                        <tr>
+                            <th>Driver Name</th>
+                            <th>Vehicle & Contact</th>
+                            <th>Metrics</th>
+                            <th>State</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="text-dark">
+                        {% if not drivers %}
+                        <tr>
+                            <td colspan="5" class="text-center text-muted py-4">No registered drivers found.</td>
+                        </tr>
+                        {% else %}
+                        {% for d in drivers %}
+                        <tr>
+                            <td>
+                                <div class="fw-bold">{{ d.name }}</div>
                                 {% if not d.user %}
-                                <span class="badge bg-warning text-dark border-0 rounded-pill ms-2" style="font-size: 0.6rem;">Awaiting Reg</span>
+                                <span class="badge bg-warning-subtle text-warning border-0 rounded-pill" style="font-size: 0.6rem;">Awaiting Reg</span>
+                                {% else %}
+                                <span class="badge bg-success-subtle text-success border-0 rounded-pill" style="font-size: 0.6rem;">Active User ({{ d.user.username }})</span>
                                 {% endif %}
-                            </div>
-                        </div>
-                        
-                        <!-- Statistics Progress Bar -->
-                        <div class="row g-2 text-dark pt-2 border-top border-light" style="font-size: 0.75rem;">
-                            <div class="col-6">
-                                <span class="text-muted d-block uppercase" style="font-size: 0.65rem; letter-spacing: 0.3px;">Completed Deliveries</span>
-                                <strong style="font-size: 0.9rem;">{{ d.completed_deliveries }} Orders</strong>
-                            </div>
-                            <div class="col-6">
-                                <span class="text-muted d-block uppercase" style="font-size: 0.65rem; letter-spacing: 0.3px;">Average Transit Time</span>
-                                <strong style="font-size: 0.9rem;">{{ d.average_delivery_time | round(1) }} Min</strong>
-                            </div>
-                        </div>
-                        
-                        <!-- Manual Admin Override Status Changer -->
-                        <div class="mt-3 d-flex gap-2 no-print">
-                            <form method="POST" action="{{ url_for('update_driver_state_admin', id=d.id) }}" class="mb-0 flex-grow-1">
-                                <select class="form-select form-select-sm rounded-pill" name="state" onchange="this.form.submit()">
-                                    <option value="">-- Manual Status Override --</option>
-                                    <option value="Available" {% if d.availability == 'Available' %}selected{% endif %}>Available</option>
-                                    <option value="On Break" {% if d.availability == 'On Break' %}selected{% endif %}>On Break</option>
-                                    <option value="Offline" {% if d.availability == 'Offline' %}selected{% endif %}>Offline</option>
-                                </select>
-                            </form>
-                            <button class="btn btn-sm btn-outline-warning rounded-circle" data-bs-toggle="modal" data-bs-target="#editDriverModal{{ d.id }}" title="Edit Driver"><i class="fas fa-edit"></i></button>
-                            <form method="POST" action="{{ url_for('delete_driver', id=d.id) }}" class="mb-0" onsubmit="return confirm('Are you sure you want to delete this driver? Associated user login will also be deleted.')">
-                                <button type="submit" class="btn btn-sm btn-outline-danger rounded-circle" title="Delete Driver"><i class="fas fa-trash"></i></button>
-                            </form>
-                        </div>
-                    </div>
-                </div>
-            </div>
+                            </td>
+                            <td>
+                                <small class="text-muted d-block"><i class="fas fa-motorcycle me-1 text-primary"></i>{{ d.vehicle_number }}</small>
+                                <small class="text-muted d-block"><i class="fas fa-phone me-1 text-primary"></i>{{ d.phone }}</small>
+                                {% if d.email %}
+                                <small class="text-muted d-block"><i class="fas fa-envelope me-1 text-primary"></i>{{ d.email }}</small>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <small class="d-block text-muted">Completed: <strong class="text-dark">{{ d.completed_deliveries }}</strong></small>
+                                <small class="d-block text-muted">Avg Transit: <strong class="text-dark">{{ d.average_delivery_time|round(1) }} Min</strong></small>
+                            </td>
+                            <td>
+                                <span class="driver-badge {% if d.availability == 'Available' %}badge-available{% elif d.availability == 'On Delivery' %}badge-ondelivery{% elif d.availability == 'On Break' %}badge-onbreak{% else %}badge-offline{% endif %}" style="font-size: 0.65rem; padding: 0.25em 0.5em;">
+                                    {{ d.availability }}
+                                </span>
+                            </td>
+                            <td class="text-end">
+                                <div class="d-flex justify-content-end gap-1">
+                                    <button class="btn btn-sm btn-outline-warning border-0 rounded-circle" data-bs-toggle="modal" data-bs-target="#editDriverModal{{ d.id }}" title="Edit Driver">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                    <form method="POST" action="{{ url_for('delete_driver', id=d.id) }}" class="mb-0 d-inline" onsubmit="return confirm('Are you sure you want to delete this driver? Associated user login will also be deleted.')">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger border-0 rounded-circle" title="Delete Driver">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
 
-            <!-- EDIT DRIVER MODAL -->
-            <div class="modal fade" id="editDriverModal{{ d.id }}" tabindex="-1">
-                <div class="modal-dialog modal-dialog-centered">
-                    <div class="modal-content border-0 shadow-lg" style="border-radius: 16px; background-color: var(--card-bg);">
-                        <form method="POST" action="{{ url_for('edit_driver', id=d.id) }}">
-                            <div class="modal-header border-bottom border-light p-3">
-                                <h5 class="modal-title fw-bold text-dark"><i class="fas fa-edit text-warning me-2"></i>Edit Driver Details</h5>
-                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        <!-- EDIT DRIVER MODAL (Inlined in loop) -->
+                        <div class="modal fade text-start" id="editDriverModal{{ d.id }}" tabindex="-1">
+                            <div class="modal-dialog modal-dialog-centered">
+                                <div class="modal-content border-0 shadow-lg" style="border-radius: 16px; background-color: var(--card-bg);">
+                                    <form method="POST" action="{{ url_for('edit_driver', id=d.id) }}">
+                                        <div class="modal-header border-bottom border-light p-3">
+                                            <h5 class="modal-title fw-bold text-dark"><i class="fas fa-edit text-warning me-2"></i>Edit Driver Details</h5>
+                                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                        </div>
+                                        <div class="modal-body p-3 text-dark">
+                                            <div class="mb-3">
+                                                <label class="form-label fw-semibold">Driver Full Name *</label>
+                                                <input type="text" class="form-control" name="name" value="{{ d.name }}" required>
+                                            </div>
+                                            <div class="mb-3">
+                                                <label class="form-label fw-semibold">Phone Number *</label>
+                                                <input type="text" class="form-control" name="phone" value="{{ d.phone }}" required>
+                                            </div>
+                                            <div class="mb-3">
+                                                <label class="form-label fw-semibold">Email Address</label>
+                                                <input type="email" class="form-control" name="email" value="{{ d.email or '' }}" placeholder="e.g. driver@parcelfleet.com">
+                                            </div>
+                                            <div class="mb-3">
+                                                <label class="form-label fw-semibold">Vehicle Plate Number *</label>
+                                                <input type="text" class="form-control" name="vehicle_number" value="{{ d.vehicle_number }}" required>
+                                            </div>
+                                            <div class="mb-3">
+                                                <label class="form-label fw-semibold">Availability State</label>
+                                                <select class="form-select" name="availability">
+                                                    <option value="Available" {% if d.availability == 'Available' %}selected{% endif %}>Available</option>
+                                                    <option value="On Delivery" {% if d.availability == 'On Delivery' %}selected{% endif %}>On Delivery</option>
+                                                    <option value="On Break" {% if d.availability == 'On Break' %}selected{% endif %}>On Break</option>
+                                                    <option value="Offline" {% if d.availability == 'Offline' %}selected{% endif %}>Offline</option>
+                                                </select>
+                                            </div>
+                                            <div class="mb-3">
+                                                <label class="form-label fw-semibold">Update Login Password (Leave blank to keep current)</label>
+                                                {% if d.user %}
+                                                <input type="password" class="form-control" name="password" placeholder="New password">
+                                                {% else %}
+                                                <input type="password" class="form-control" name="password" placeholder="Driver has not registered an account yet" disabled>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                        <div class="modal-footer border-top border-light p-3">
+                                            <button type="button" class="btn btn-secondary rounded-pill px-3" data-bs-dismiss="modal">Cancel</button>
+                                            <button type="submit" class="btn btn-primary rounded-pill px-4" style="background-color: var(--primary-color); border: none;">Save Changes</button>
+                                        </div>
+                                    </form>
+                                </div>
                             </div>
-                            <div class="modal-body p-3 text-dark">
-                                <div class="mb-3">
-                                    <label class="form-label fw-semibold">Driver Full Name *</label>
-                                    <input type="text" class="form-control" name="name" value="{{ d.name }}" required>
-                                </div>
-                                <div class="mb-3">
-                                    <label class="form-label fw-semibold">Phone Number *</label>
-                                    <input type="text" class="form-control" name="phone" value="{{ d.phone }}" required>
-                                </div>
-                                <div class="mb-3">
-                                    <label class="form-label fw-semibold">Email Address</label>
-                                    <input type="email" class="form-control" name="email" value="{{ d.email or '' }}" placeholder="e.g. driver@parcelfleet.com">
-                                </div>
-                                <div class="mb-3">
-                                    <label class="form-label fw-semibold">Vehicle Plate Number *</label>
-                                    <input type="text" class="form-control" name="vehicle_number" value="{{ d.vehicle_number }}" required>
-                                </div>
-                                <div class="mb-3">
-                                    <label class="form-label fw-semibold">Availability State</label>
-                                    <select class="form-select" name="availability">
-                                        <option value="Available" {% if d.availability == 'Available' %}selected{% endif %}>Available</option>
-                                        <option value="On Delivery" {% if d.availability == 'On Delivery' %}selected{% endif %}>On Delivery</option>
-                                        <option value="On Break" {% if d.availability == 'On Break' %}selected{% endif %}>On Break</option>
-                                        <option value="Offline" {% if d.availability == 'Offline' %}selected{% endif %}>Offline</option>
-                                    </select>
-                                </div>
-                                <div class="mb-3">
-                                    <label class="form-label fw-semibold">Update Login Password (Leave blank to keep current)</label>
-                                    {% if d.user %}
-                                    <input type="password" class="form-control" name="password" placeholder="New password">
-                                    {% else %}
-                                    <input type="password" class="form-control" name="password" placeholder="Driver has not registered an account yet" disabled>
-                                    {% endif %}
-                                </div>
-                            </div>
-                            <div class="modal-footer border-top border-light p-3">
-                                <button type="button" class="btn btn-secondary rounded-pill px-3" data-bs-dismiss="modal">Cancel</button>
-                                <button type="submit" class="btn btn-primary rounded-pill px-4" style="background-color: var(--primary-color); border: none;">Save Changes</button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
+                        </div>
+                        {% endfor %}
+                        {% endif %}
+                    </tbody>
+                </table>
             </div>
-            {% endfor %}
         </div>
     </div>
     
     <!-- RIGHT SIDE: FULL INTERACTIVE OSM FLEET MAP -->
-    <div class="col-12 col-xl-7">
+    <div class="col-12 col-xl-5">
         <div class="premium-card h-100 p-0 overflow-hidden mb-0" style="min-height: 480px; position: relative;">
             <div class="premium-card-title p-3 m-0 bg-transparent border-bottom border-light no-print" style="position: absolute; top: 0; left: 0; right: 0; z-index: 1000; background-color: rgba(255, 255, 255, 0.9) !important; backdrop-filter: blur(8px);">
                 <span><i class="fas fa-satellite-dish me-2 text-primary"></i>Live Fleet Satellite Map</span>
@@ -153,6 +145,7 @@
         </div>
     </div>
 </div>
+
 <!-- ADD NEW DRIVER MODAL -->
 <div class="modal fade" id="addDriverModal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered">
