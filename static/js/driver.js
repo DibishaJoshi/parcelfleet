@@ -171,12 +171,12 @@ document.addEventListener('DOMContentLoaded', function () {
                         const realLat = position.coords.latitude;
                         const realLng = position.coords.longitude;
                         
-                        // Boundary check: coordinates must reside within Kathmandu Valley (Lat: 27.5-27.9, Lng: 85.1-85.5)
-                        if (realLat >= 27.50 && realLat <= 27.90 && realLng >= 85.10 && realLng <= 85.55) {
-                            console.log('Real Device Location Captured within bounds: ', realLat, realLng);
+                        // Allow any valid device coordinates to support testing/usage anywhere
+                        if (realLat && realLng && Math.abs(realLat) <= 90 && Math.abs(realLng) <= 180) {
+                            console.log('Real Device Location Captured: ', realLat, realLng);
                             sendLocationUpdate(realLat, realLng, state);
                         } else {
-                            console.warn('Real GPS coordinates (' + realLat + ', ' + realLng + ') reside outside Kathmandu bounds. Automatically falling back to Dijkstra routing simulation.');
+                            console.warn('Invalid GPS coordinates received. Automatically falling back to routing simulation.');
                             runSimulationFallback(state);
                         }
                     },

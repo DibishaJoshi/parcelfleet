@@ -254,8 +254,22 @@ def greedy_driver_assignment(parcel, available_drivers):
     """
     Greedy Driver Assignment: Finds the closest available driver
     to the parcel's pickup hub coordinate.
+    Enforces business rules:
+      - Parcels > 5.0 kg must be grouped as manifests (returns None)
+      - Parcels <= 5.0 kg must be delivered by Bike drivers
     Returns: (driver_object, distance) or (None, None)
     """
+    if parcel.weight > 5.0:
+        return None, None
+        
+    bike_drivers = []
+    for d in available_drivers:
+        if d.availability == 'Available' and d.assigned_vehicle and d.assigned_vehicle.vehicle_type == 'Bike':
+            bike_drivers.append(d)
+            
+    if not bike_drivers:
+        return None, None
+
     all_hubs = get_all_hubs_dict()
     pickup_hub = all_hubs.get(parcel.pickup_hub)
     if not pickup_hub:
@@ -268,13 +282,11 @@ def greedy_driver_assignment(parcel, available_drivers):
     closest_driver = None
     min_distance = float('inf')
     
-    for driver in available_drivers:
-        # Check if driver is available
-        if driver.availability == 'Available':
-            dist = haversine_distance(driver.latitude, driver.longitude, pickup_lat, pickup_lng)
-            if dist < min_distance:
-                min_distance = dist
-                closest_driver = driver
+    for driver in bike_drivers:
+        dist = haversine_distance(driver.latitude, driver.longitude, pickup_lat, pickup_lng)
+        if dist < min_distance:
+            min_distance = dist
+            closest_driver = driver
                 
     return closest_driver, min_distance
 

@@ -49,7 +49,7 @@
             </div>
             
             <ul class="sidebar-nav">
-                {% if current_user.role == 'admin' %}
+                {% if current_user.role in ['admin', 'hub_admin', 'booking_staff', 'warehouse_staff', 'dispatcher', 'branch_staff'] %}
                 <li class="sidebar-nav-item {% if active_page == 'dashboard' %}active{% endif %}">
                     <a href="{{ url_for('admin_dashboard') }}">
                         <i class="fa-solid fa-chart-line"></i>
@@ -59,7 +59,31 @@
                 <li class="sidebar-nav-item {% if active_page == 'parcels' %}active{% endif %}">
                     <a href="{{ url_for('manage_parcels') }}">
                         <i class="fa-solid fa-box-open"></i>
-                        <span>Parcels</span>
+                        <span>Bookings & Deliveries</span>
+                    </a>
+                </li>
+                <li class="sidebar-nav-item {% if active_page == 'manifests' %}active{% endif %}">
+                    <a href="{{ url_for('manage_manifests') }}">
+                        <i class="fa-solid fa-file-invoice-dollar"></i>
+                        <span>Manifests</span>
+                    </a>
+                </li>
+                <li class="sidebar-nav-item {% if active_page == 'assignments' %}active{% endif %}">
+                    <a href="{{ url_for('manage_assignments') }}">
+                        <i class="fa-solid fa-truck-ramp-box"></i>
+                        <span>Assignments</span>
+                    </a>
+                </li>
+                <li class="sidebar-nav-item {% if active_page == 'vehicles' %}active{% endif %}">
+                    <a href="{{ url_for('manage_vehicles') }}">
+                        <i class="fa-solid fa-truck"></i>
+                        <span>Vehicles</span>
+                    </a>
+                </li>
+                <li class="sidebar-nav-item {% if active_page == 'maintenance' %}active{% endif %}">
+                    <a href="{{ url_for('manage_maintenance') }}">
+                        <i class="fa-solid fa-screwdriver-wrench"></i>
+                        <span>Maintenance</span>
                     </a>
                 </li>
                 <li class="sidebar-nav-item {% if active_page == 'drivers' %}active{% endif %}">
@@ -68,25 +92,44 @@
                         <span>Drivers / Fleet</span>
                     </a>
                 </li>
+                <li class="sidebar-nav-item {% if active_page == 'shippers' %}active{% endif %}">
+                    <a href="{{ url_for('manage_shippers') }}">
+                        <i class="fa-solid fa-building"></i>
+                        <span>Shippers</span>
+                    </a>
+                </li>
+                <li class="sidebar-nav-item {% if active_page == 'consignees' %}active{% endif %}">
+                    <a href="{{ url_for('manage_consignees') }}">
+                        <i class="fa-solid fa-address-book"></i>
+                        <span>Consignees</span>
+                    </a>
+                </li>
+                <li class="sidebar-nav-item {% if active_page == 'merchandise' %}active{% endif %}">
+                    <a href="{{ url_for('manage_merchandise') }}">
+                        <i class="fa-solid fa-cubes"></i>
+                        <span>Merchandise</span>
+                    </a>
+                </li>
+                <li class="sidebar-nav-item {% if active_page == 'reports' %}active{% endif %}">
+                    <a href="{{ url_for('view_reports') }}">
+                        <i class="fa-solid fa-chart-pie"></i>
+                        <span>Reports</span>
+                    </a>
+                </li>
+                {% if current_user.role == 'admin' %}
                 <li class="sidebar-nav-item {% if active_page == 'hubs' %}active{% endif %}">
                     <a href="{{ url_for('manage_hubs') }}">
                         <i class="fa-solid fa-warehouse"></i>
-                        <span>Hubs & Admins</span>
+                        <span>Hubs</span>
                     </a>
                 </li>
-                {% elif current_user.role == 'hub_admin' %}
-                <li class="sidebar-nav-item {% if active_page == 'dashboard' %}active{% endif %}">
-                    <a href="{{ url_for('admin_dashboard') }}">
-                        <i class="fa-solid fa-chart-line"></i>
-                        <span>Dashboard</span>
+                <li class="sidebar-nav-item {% if active_page == 'users' %}active{% endif %}">
+                    <a href="{{ url_for('manage_users') }}">
+                        <i class="fa-solid fa-users-gear"></i>
+                        <span>User Management</span>
                     </a>
                 </li>
-                <li class="sidebar-nav-item {% if active_page == 'parcels' %}active{% endif %}">
-                    <a href="{{ url_for('manage_parcels') }}">
-                        <i class="fa-solid fa-box-open"></i>
-                        <span>Parcels</span>
-                    </a>
-                </li>
+                {% endif %}
                 {% elif current_user.role == 'driver' %}
                 <li class="sidebar-nav-item {% if active_page == 'driver_dashboard' %}active{% endif %}">
                     <a href="{{ url_for('driver_dashboard') }}">
@@ -96,13 +139,6 @@
                 </li>
                 {% endif %}
             </ul>
-            
-            <!-- <div class="sidebar-footer border-top border-secondary pt-3 mt-auto">
-                <a href="{{ url_for('logout') }}" class="d-flex align-items-center gap-3 text-decoration-none text-danger" style="padding: 0.5rem 1rem;">
-                    <i class="fa-solid fa-right-from-bracket"></i>
-                    <span>Log Out</span>
-                </a>
-            </div> -->
         </aside>
 
         <!-- VIEWPORT WORKSPACE -->
@@ -121,17 +157,19 @@
                         <i class="fa-solid fa-moon" id="themeIcon"></i>
                     </button>
                     
-                    <!-- Notification Bell popover placeholder -->
+                    <!-- Notification Bell popover -->
                     <div class="dropdown no-print">
-                        <button class="theme-toggle-btn position-relative" data-bs-toggle="dropdown">
+                        <button class="theme-toggle-btn position-relative" data-bs-toggle="dropdown" id="notifBellBtn">
                             <i class="fa-solid fa-bell"></i>
-                            <span class="position-absolute top-0 start-100 translate-middle p-1 bg-danger border border-light rounded-circle"></span>
+                            <span class="position-absolute top-0 start-100 translate-middle p-1 bg-danger border border-light rounded-circle" id="notifBadge" style="display:none;"></span>
                         </button>
-                        <div class="dropdown-menu dropdown-menu-end p-3 shadow border-0" style="width: 280px; border-radius: 12px; background-color: var(--card-bg);">
-                            <h6 class="fw-bold mb-2 border-bottom pb-2 text-dark">Recent Notifications</h6>
-                            <div style="max-height: 200px; overflow-y: auto; font-size: 0.85rem;" id="header_notif_list">
-                                <p class="text-muted mb-0 py-2"><i class="fas fa-check-circle text-success me-2"></i>System seeded successfully.</p>
-                                <p class="text-muted mb-0 py-2"><i class="fas fa-info-circle text-primary me-2"></i>Fleet simulation active.</p>
+                        <div class="dropdown-menu dropdown-menu-end p-3 shadow border-0" style="width: 320px; border-radius: 12px; background-color: var(--card-bg);">
+                            <div class="d-flex justify-content-between align-items-center mb-2 border-bottom pb-2">
+                                <h6 class="fw-bold mb-0 text-dark">System Alerts & Notifications</h6>
+                                <span class="badge bg-primary rounded-pill" id="notifCount">0</span>
+                            </div>
+                            <div style="max-height: 250px; overflow-y: auto; font-size: 0.85rem;" id="header_notif_list">
+                                <p class="text-muted text-center mb-0 py-2"><i class="fas fa-spinner fa-spin me-2"></i>Loading alerts...</p>
                             </div>
                         </div>
                     </div>
@@ -144,7 +182,7 @@
                             </div>
                             <div class="d-none d-md-block text-start">
                                 <span class="d-block fw-semibold" style="font-size: 0.85rem; line-height: 1;">{{ current_user.username }}</span>
-                                <span class="text-muted" style="font-size: 0.75rem;">{{ current_user.role.upper() }}</span>
+                                <span class="text-muted text-uppercase" style="font-size: 0.75rem;">{{ current_user.role.replace('_', ' ') }}</span>
                             </div>
                         </div>
                         <ul class="dropdown-menu dropdown-menu-end border-0 shadow" style="border-radius: 12px; background-color: var(--card-bg);">
@@ -192,32 +230,57 @@
             document.documentElement.setAttribute('data-theme', newTheme);
             localStorage.setItem('theme', newTheme);
             
-            // Toggle icon classes
             const icon = document.getElementById('themeIcon');
-            if (newTheme === 'dark') {
-                icon.className = 'fa-solid fa-sun';
-            } else {
-                icon.className = 'fa-solid fa-moon';
+            if (icon) {
+                icon.className = newTheme === 'dark' ? 'fa-solid fa-sun' : 'fa-solid fa-moon';
             }
         }
         
-        // Match icon on page load
         document.addEventListener('DOMContentLoaded', () => {
-            const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
+            const savedTheme = localStorage.getItem('theme') || 'light';
+            document.documentElement.setAttribute('data-theme', savedTheme);
             const icon = document.getElementById('themeIcon');
             if (icon) {
-                if (currentTheme === 'dark') {
-                    icon.className = 'fa-solid fa-sun';
-                } else {
-                    icon.className = 'fa-solid fa-moon';
-                }
+                icon.className = savedTheme === 'dark' ? 'fa-solid fa-sun' : 'fa-solid fa-moon';
             }
+
+            // Fetch dynamic notifications
+            fetch('/api/admin/notifications')
+                .then(res => res.json())
+                .then(data => {
+                    const list = document.getElementById('header_notif_list');
+                    const badge = document.getElementById('notifBadge');
+                    const count = document.getElementById('notifCount');
+                    if (list && data.notifications) {
+                        if (data.notifications.length === 0) {
+                            list.innerHTML = '<p class="text-muted text-center mb-0 py-2"><i class="fas fa-check-circle text-success me-2"></i>No active warnings.</p>';
+                            if (badge) badge.style.display = 'none';
+                            if (count) count.innerText = '0';
+                        } else {
+                            if (badge) badge.style.display = 'inline-block';
+                            if (count) count.innerText = data.notifications.length;
+                            let html = '';
+                            data.notifications.slice(0, 8).forEach(n => {
+                                let iconClass = 'fa-info-circle text-primary';
+                                if (n.type === 'warning' || n.type === 'danger') iconClass = 'fa-triangle-exclamation text-danger';
+                                else if (n.type === 'success') iconClass = 'fa-circle-check text-success';
+                                html += `<div class="p-2 border-bottom">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <i class="fas ${iconClass}"></i>
+                                        <strong style="font-size: 0.8rem;">${n.title}</strong>
+                                    </div>
+                                    <p class="mb-0 text-muted small mt-1" style="font-size: 0.75rem;">${n.message}</p>
+                                </div>`;
+                            });
+                            list.innerHTML = html;
+                        }
+                    }
+                }).catch(() => {});
         });
     </script>
     
-    <!-- Admin or Driver script extensions -->
     {% if current_user.is_authenticated %}
-        {% if current_user.role == 'admin' %}
+        {% if current_user.role in ['admin', 'hub_admin', 'booking_staff', 'warehouse_staff', 'dispatcher', 'branch_staff'] %}
             <script src="{{ url_for('static', filename='js/admin.js') }}"></script>
         {% elif current_user.role == 'driver' %}
             <script src="{{ url_for('static', filename='js/driver.js') }}"></script>

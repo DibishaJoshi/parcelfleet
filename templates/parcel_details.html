@@ -521,10 +521,38 @@ document.addEventListener('DOMContentLoaded', function () {
             }
 
             // Draw route
-            if (data.path && data.path.length > 0) {
+            let bounds = [];
+            
+            if (data.segments && data.segments.length > 0) {
+                data.segments.forEach(seg => {
+                    if (seg.coordinates && seg.coordinates.length > 0) {
+                        const pts = seg.coordinates.map(pt => [pt.lat, pt.lng]);
+                        bounds.push(...pts);
+                        
+                        // Casing Polyline
+                        L.polyline(pts, {
+                            color: '#1E293B',
+                            weight: 8,
+                            opacity: 0.9,
+                            lineCap: 'round',
+                            lineJoin: 'round'
+                        }).addTo(map);
+
+                        // Inner Polyline using traffic color or fallback blue
+                        L.polyline(pts, {
+                            color: seg.color || '#2563EB',
+                            weight: 4,
+                            opacity: 1.0,
+                            lineCap: 'round',
+                            lineJoin: 'round'
+                        }).addTo(map);
+                    }
+                });
+            } else if (data.path && data.path.length > 0) {
+                // Fallback to path if segments are missing
                 const pts = data.path.map(pt => [pt.lat, pt.lng]);
+                bounds.push(...pts);
                 
-                // Casing
                 L.polyline(pts, {
                     color: '#1E293B',
                     weight: 8,
@@ -533,16 +561,17 @@ document.addEventListener('DOMContentLoaded', function () {
                     lineJoin: 'round'
                 }).addTo(map);
 
-                // Inner Polyline
-                const poly = L.polyline(pts, {
+                L.polyline(pts, {
                     color: '#2563EB',
                     weight: 4,
                     opacity: 1.0,
                     lineCap: 'round',
                     lineJoin: 'round'
                 }).addTo(map);
-
-                map.fitBounds(poly.getBounds(), { padding: [40, 40] });
+            }
+            
+            if (bounds.length > 0) {
+                map.fitBounds(L.latLngBounds(bounds), { padding: [40, 40] });
             }
         });
 

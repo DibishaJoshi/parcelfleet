@@ -161,16 +161,49 @@
                         <input type="text" class="form-control" name="name" placeholder="e.g. Suman Thapa" required>
                     </div>
                     <div class="mb-3">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <label class="form-label fw-semibold mb-0">Driver ID (Employee Code) *</label>
+                            <button type="button" class="btn btn-sm btn-link p-0 text-primary text-decoration-none" id="btnGenEmployeeCode" style="font-size: 0.8rem;">
+                                <i class="fas fa-magic me-1"></i>Generate Code
+                            </button>
+                        </div>
+                        <input type="text" class="form-control" name="employee_code" id="inputEmployeeCode" placeholder="e.g. DRV-1005" required>
+                        <small class="text-muted d-block mt-1">A unique employment roster identifier (e.g. DRV-XXXX) used for payroll, rosters, and manifests.</small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">License Number *</label>
+                        <input type="text" class="form-control" name="license_number" placeholder="e.g. LIC-123456" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Driver Type (Vehicle Group) *</label>
+                        <select class="form-select" name="driver_type" id="addDriverTypeSelect" required>
+                            <option value="Bike">Bike Rider (Assign available Bike)</option>
+                            <option value="Truck/Van">Truck / Van Driver (Assign available Truck or Van)</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Select Available Company Vehicle *</label>
+                        <select class="form-select" name="assigned_vehicle_id" id="addDriverVehicleSelect" required>
+                            <option value="">-- Choose Available Vehicle --</option>
+                            {% for v in vehicles %}
+                                {% if (not v.drivers or v.drivers|length == 0) and v.current_status == 'Available' %}
+                                    <option value="{{ v.id }}" data-type="{{ v.vehicle_type }}">{{ v.vehicle_code }} ({{ v.license_plate }}) - {{ v.vehicle_type }}</option>
+                                {% endif %}
+                            {% endfor %}
+                            <option value="manual">-- No Vehicle Available (Use Manual Plate below) --</option>
+                        </select>
+                    </div>
+                    <div class="mb-3" id="manualPlateGroup" style="display: none;">
+                        <label class="form-label fw-semibold">Vehicle Plate Number (Manual Entry) *</label>
+                        <input type="text" class="form-control" name="vehicle_number" id="manualVehicleNumber" placeholder="e.g. BA 2 PA 5678">
+                    </div>
+                    <div class="mb-3">
                         <label class="form-label fw-semibold">Phone Number *</label>
                         <input type="text" class="form-control" name="phone" placeholder="e.g. 9841XXXXXX" required>
                     </div>
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Email Address (Optional)</label>
                         <input type="email" class="form-control" name="email" placeholder="e.g. suman@parcelfleet.com">
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold">Vehicle Plate Number *</label>
-                        <input type="text" class="form-control" name="vehicle_number" placeholder="e.g. BA 2 PA 5678" required>
                     </div>
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Initial Availability State</label>
@@ -193,4 +226,93 @@
 
 {% block extra_js %}
 <script src="{{ url_for('static', filename='js/tracking.js') }}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const driverTypeSelect = document.getElementById('addDriverTypeSelect');
+    const vehicleSelect = document.getElementById('addDriverVehicleSelect');
+    const manualPlateGroup = document.getElementById('manualPlateGroup');
+    const manualPlateInput = document.getElementById('manualVehicleNumber');
+    
+    if (driverTypeSelect && vehicleSelect) {
+        const allOptions = Array.from(vehicleSelect.options);
+        
+        function filterVehicles() {
+            const driverType = driverTypeSelect.value; // 'Bike' or 'Truck/Van'
+            
+            // Clear current selection
+            vehicleSelect.value = "";
+            
+            allOptions.forEach(opt => {
+                if (opt.value === "" || opt.value === "manual") {
+                    opt.style.display = "block";
+                    opt.disabled = false;
+                    return;
+                }
+                const vType = opt.getAttribute('data-type');
+                if (driverType === 'Bike') {
+                    if (vType === 'Bike') {
+                        opt.style.display = "block";
+                        opt.disabled = false;
+                    } else {
+                        opt.style.display = "none";
+                        opt.disabled = true;
+                    }
+                } else {
+                    if (vType !== 'Bike') {
+                        opt.style.display = "block";
+                        opt.disabled = false;
+                    } else {
+                        opt.style.display = "none";
+                        opt.disabled = true;
+                    }
+                }
+            });
+            
+            updateManualPlateVisibility();
+        }
+        
+        function updateManualPlateVisibility() {
+            if (vehicleSelect.value === "manual" || vehicleSelect.value === "") {
+                manualPlateGroup.style.display = "block";
+                manualPlateInput.required = true;
+            } else {
+                manualPlateGroup.style.display = "none";
+                manualPlateInput.required = false;
+                // Pre-fill manual plate value with selected vehicle's plate from option text
+                const selectedOpt = vehicleSelect.options[vehicleSelect.selectedIndex];
+                const match = selectedOpt.text.match(/\(([^)]+)\)/);
+                if (match && match[1]) {
+                    manualPlateInput.value = match[1];
+                }
+            }
+        }
+        
+        driverTypeSelect.addEventListener('change', filterVehicles);
+        vehicleSelect.addEventListener('change', updateManualPlateVisibility);
+        
+        // Run once on load
+        filterVehicles();
+    }
+    
+    // Employee Code Auto Generator
+    const btnGen = document.getElementById('btnGenEmployeeCode');
+    const inputEmp = document.getElementById('inputEmployeeCode');
+    
+    function generateEmployeeCode() {
+        const rand = Math.floor(1000 + Math.random() * 9000);
+        inputEmp.value = `DRV-${rand}`;
+    }
+    
+    if (btnGen && inputEmp) {
+        btnGen.addEventListener('click', function(e) {
+            e.preventDefault();
+            generateEmployeeCode();
+        });
+        // Pre-fill on initial load if empty
+        if (!inputEmp.value) {
+            generateEmployeeCode();
+        }
+    }
+});
+</script>
 {% endblock %}
