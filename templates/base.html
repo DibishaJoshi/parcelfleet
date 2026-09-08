@@ -74,6 +74,12 @@
                         <span>Assignments</span>
                     </a>
                 </li>
+                <li class="sidebar-nav-item {% if active_page == 'optimization' %}active{% endif %}">
+                    <a href="{{ url_for('delivery_optimization') }}">
+                        <i class="fa-solid fa-route"></i>
+                        <span>Route Optimization</span>
+                    </a>
+                </li>
                 <li class="sidebar-nav-item {% if active_page == 'vehicles' %}active{% endif %}">
                     <a href="{{ url_for('manage_vehicles') }}">
                         <i class="fa-solid fa-truck"></i>
@@ -90,18 +96,6 @@
                     <a href="{{ url_for('manage_drivers') }}">
                         <i class="fa-solid fa-motorcycle"></i>
                         <span>Drivers / Fleet</span>
-                    </a>
-                </li>
-                <li class="sidebar-nav-item {% if active_page == 'shippers' %}active{% endif %}">
-                    <a href="{{ url_for('manage_shippers') }}">
-                        <i class="fa-solid fa-building"></i>
-                        <span>Shippers</span>
-                    </a>
-                </li>
-                <li class="sidebar-nav-item {% if active_page == 'consignees' %}active{% endif %}">
-                    <a href="{{ url_for('manage_consignees') }}">
-                        <i class="fa-solid fa-address-book"></i>
-                        <span>Consignees</span>
                     </a>
                 </li>
                 <li class="sidebar-nav-item {% if active_page == 'merchandise' %}active{% endif %}">

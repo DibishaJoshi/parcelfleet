@@ -362,3 +362,380 @@ def fetch_osrm_routes_with_alternatives(lat1, lng1, lat2, lng2):
             'distance_km': dist_km
         })
     return routes_list
+
+# Distinct Color Palette for Multi-Courier Route Visualizations
+COURIER_PALETTE = [
+    '#4F46E5',  # Indigo
+    '#059669',  # Emerald Green
+    '#D97706',  # Amber / Warm Gold
+    '#DC2626',  # Crimson Red
+    '#7C3AED',  # Deep Violet
+    '#0891B2',  # Cyan / Teal
+    '#DB2777',  # Pink / Magenta
+    '#2563EB',  # Royal Blue
+    '#475569',  # Slate Gray
+    '#CA8A04'   # Ochre
+]
+
+def calculate_location_distance(loc1, loc2):
+    """
+    Computes road/network shortest path distance between two locations.
+    Leverages Dijkstra's algorithm for inter-hub transit and Haversine for local legs.
+    """
+    lat1 = loc1['lat']
+    lng1 = loc1['lng']
+    lat2 = loc2['lat']
+    lng2 = loc2['lng']
+    
+    hub1 = loc1.get('hub_name') or get_closest_hub(lat1, lng1)
+    hub2 = loc2.get('hub_name') or get_closest_hub(lat2, lng2)
+    
+    if hub1 and hub2 and hub1 != hub2:
+        # Use Dijkstra on network graph between hubs
+        path, hub_dist = dijkstra(hub1, hub2)
+        if path and hub_dist != float('inf'):
+            all_hubs = get_all_hubs_dict()
+            h1_coords = all_hubs.get(hub1, {'lat': lat1, 'lng': lng1})
+            h2_coords = all_hubs.get(hub2, {'lat': lat2, 'lng': lng2})
+            d1 = haversine_distance(lat1, lng1, h1_coords['lat'], h1_coords['lng'])
+            d2 = haversine_distance(h2_coords['lat'], h2_coords['lng'], lat2, lng2)
+            return d1 + hub_dist + d2
+            
+    # Same hub or fallback direct road distance approximation (1.25x road factor)
+    return haversine_distance(lat1, lng1, lat2, lng2) * 1.25
+
+def solve_tsp(start_location, stops):
+    """
+    Solves the Traveling Salesperson Problem (TSP) to determine the optimal delivery sequence.
+    Utilizes Dijkstra-backed distances between locations.
+    Parameters:
+      - start_location: dict {'lat': float, 'lng': float, 'name': str (optional)}
+      - stops: list of dicts [{'id': ..., 'lat': float, 'lng': float, ...}]
+    Returns:
+      - ordered_stops: list of stop dicts in optimal delivery sequence with 'stop_number' and 'leg_distance_km'
+      - total_distance_km: total route distance in km
+      - legs: list of leg dicts with from, to, distance
+    """
+    if not stops:
+        return [], 0.0, []
+        
+    if len(stops) == 1:
+        dist = calculate_location_distance(start_location, stops[0])
+        stop_with_num = dict(stops[0])
+        stop_with_num['stop_number'] = 1
+        stop_with_num['leg_distance_km'] = round(dist, 2)
+        legs = [{
+            'from_name': start_location.get('name', 'Courier Start'),
+            'from_lat': start_location['lat'],
+            'from_lng': start_location['lng'],
+            'to_name': stops[0].get('receiver_name', 'Stop 1'),
+            'to_lat': stops[0]['lat'],
+            'to_lng': stops[0]['lng'],
+            'distance_km': round(dist, 2)
+        }]
+        return [stop_with_num], round(dist, 2), legs
+
+    # Precalculate distance matrix using Dijkstra / Road network distances
+    n = len(stops)
+    all_points = [start_location] + stops
+    dist_matrix = [[0.0] * (n + 1) for _ in range(n + 1)]
+    for i in range(n + 1):
+        for j in range(i + 1, n + 1):
+            d = calculate_location_distance(all_points[i], all_points[j])
+            dist_matrix[i][j] = d
+            dist_matrix[j][i] = d
+
+    best_order = None
+    best_dist = float('inf')
+
+    # For small n (<= 9), evaluate all permutations for exact global optimum
+    if n <= 9:
+        import itertools
+        for perm in itertools.permutations(range(1, n + 1)):
+            current_dist = dist_matrix[0][perm[0]]
+            for k in range(len(perm) - 1):
+                current_dist += dist_matrix[perm[k]][perm[k+1]]
+                if current_dist >= best_dist:  # Pruning
+                    break
+            if current_dist < best_dist:
+                best_dist = current_dist
+                best_order = list(perm)
+    else:
+        # Nearest neighbor initialization + 2-opt heuristic for larger n
+        unvisited = set(range(1, n + 1))
+        curr = 0
+        tour = []
+        while unvisited:
+            next_node = min(unvisited, key=lambda node: dist_matrix[curr][node])
+            tour.append(next_node)
+            unvisited.remove(next_node)
+            curr = next_node
+            
+        # 2-opt local search optimization
+        improved = True
+        while improved:
+            improved = False
+            for i in range(len(tour) - 1):
+                for j in range(i + 1, len(tour)):
+                    prev_i = 0 if i == 0 else tour[i - 1]
+                    next_j = tour[j + 1] if j + 1 < len(tour) else None
+                    
+                    old_dist = dist_matrix[prev_i][tour[i]]
+                    if next_j is not None:
+                        old_dist += dist_matrix[tour[j]][next_j]
+                        
+                    new_dist = dist_matrix[prev_i][tour[j]]
+                    if next_j is not None:
+                        new_dist += dist_matrix[tour[i]][next_j]
+                        
+                    if new_dist < old_dist - 1e-6:
+                        tour[i:j+1] = tour[i:j+1][::-1]
+                        improved = True
+                        break
+                if improved:
+                    break
+                    
+        best_dist = dist_matrix[0][tour[0]]
+        for k in range(len(tour) - 1):
+            best_dist += dist_matrix[tour[k]][tour[k+1]]
+        best_order = tour
+
+    # Build ordered output
+    ordered_stops = []
+    legs = []
+    prev_idx = 0
+    for rank, stop_idx in enumerate(best_order, 1):
+        orig_stop = stops[stop_idx - 1]
+        leg_dist = dist_matrix[prev_idx][stop_idx]
+        stop_dict = dict(orig_stop)
+        stop_dict['stop_number'] = rank
+        stop_dict['leg_distance_km'] = round(leg_dist, 2)
+        ordered_stops.append(stop_dict)
+        
+        legs.append({
+            'from_name': all_points[prev_idx].get('name', f"Stop #{rank-1}" if rank > 1 else 'Courier Origin'),
+            'from_lat': all_points[prev_idx]['lat'],
+            'from_lng': all_points[prev_idx]['lng'],
+            'to_name': orig_stop.get('receiver_name', f"Stop #{rank}"),
+            'to_lat': orig_stop['lat'],
+            'to_lng': orig_stop['lng'],
+            'distance_km': round(leg_dist, 2)
+        })
+        prev_idx = stop_idx
+
+    return ordered_stops, round(best_dist, 2), legs
+
+def multi_courier_optimization(couriers, deliveries):
+    """
+    Multi-Courier Delivery Optimization:
+    1. Assigns deliveries to multiple couriers based on vehicle capacity (weight & volume).
+    2. Strictly enforces capacity constraints (never exceeds courier vehicle capacity).
+    3. Identifies unassigned deliveries when total capacity is insufficient.
+    4. Applies TSP to compute the optimal delivery order for each courier.
+    5. Calculates total load, remaining capacity, ordered route, and distances for each courier.
+    """
+    if not couriers:
+        return {
+            'summary': {
+                'total_deliveries': len(deliveries),
+                'assigned_count': 0,
+                'unassigned_count': len(deliveries),
+                'total_couriers_used': 0,
+                'total_distance_km': 0.0
+            },
+            'courier_routes': [],
+            'unassigned_deliveries': [
+                dict(d, reason="No available couriers in service.") for d in deliveries
+            ]
+        }
+
+    # Normalize courier objects / dicts
+    courier_state = []
+    for i, c in enumerate(couriers):
+        c_id = c.id if hasattr(c, 'id') else c.get('id', i + 1)
+        c_name = c.name if hasattr(c, 'name') else c.get('name', f'Courier {i+1}')
+        c_phone = c.phone if hasattr(c, 'phone') else c.get('phone', '')
+        c_lat = float(c.latitude if hasattr(c, 'latitude') else c.get('lat', 27.7172))
+        c_lng = float(c.longitude if hasattr(c, 'longitude') else c.get('lng', 85.3240))
+        
+        # Vehicle & Capacity
+        if hasattr(c, 'effective_capacity_weight'):
+            cap_w = float(c.effective_capacity_weight)
+            cap_v = float(c.effective_capacity_volume)
+            v_type = c.vehicle_type_name
+            v_plate = c.assigned_vehicle.license_plate if c.assigned_vehicle else 'N/A'
+            v_code = c.assigned_vehicle.vehicle_code if c.assigned_vehicle else 'N/A'
+        else:
+            cap_w = float(c.get('capacity_weight', 30.0))
+            cap_v = float(c.get('capacity_volume', 0.2))
+            v_type = c.get('vehicle_type', 'Bike')
+            v_plate = c.get('license_plate', 'N/A')
+            v_code = c.get('vehicle_code', 'N/A')
+            
+        color = COURIER_PALETTE[i % len(COURIER_PALETTE)]
+        
+        courier_state.append({
+            'id': c_id,
+            'name': c_name,
+            'phone': c_phone,
+            'lat': c_lat,
+            'lng': c_lng,
+            'capacity_weight': cap_w,
+            'capacity_volume': cap_v,
+            'current_weight': 0.0,
+            'current_volume': 0.0,
+            'vehicle_type': v_type,
+            'license_plate': v_plate,
+            'vehicle_code': v_code,
+            'color': color,
+            'assigned_items': []
+        })
+
+    # Normalize delivery objects / dicts
+    unassigned = []
+    normalized_deliveries = []
+    for d in deliveries:
+        d_id = d.id if hasattr(d, 'id') else d.get('id')
+        t_id = d.tracking_id if hasattr(d, 'tracking_id') else d.get('tracking_id', f'PF-{d_id}')
+        r_name = d.receiver_name if hasattr(d, 'receiver_name') else d.get('receiver_name', 'Customer')
+        addr = d.delivery_address if hasattr(d, 'delivery_address') else d.get('delivery_address', '')
+        d_lat = float(d.delivery_latitude if hasattr(d, 'delivery_latitude') else d.get('lat', 27.7000))
+        d_lng = float(d.delivery_longitude if hasattr(d, 'delivery_longitude') else d.get('lng', 85.3300))
+        weight = float(d.weight if hasattr(d, 'weight') else d.get('weight', 1.0))
+        
+        if hasattr(d, 'volume_m3'):
+            vol = float(d.volume_m3)
+        elif hasattr(d, 'length') and hasattr(d, 'width') and hasattr(d, 'height'):
+            vol = float((d.length * d.width * d.height) / 1000000.0)
+        else:
+            vol = float(d.get('volume_m3', 0.005))
+            
+        normalized_deliveries.append({
+            'parcel_id': d_id,
+            'tracking_id': t_id,
+            'receiver_name': r_name,
+            'delivery_address': addr,
+            'lat': d_lat,
+            'lng': d_lng,
+            'weight': weight,
+            'volume_m3': vol,
+            'raw_parcel': d
+        })
+
+    # Sort deliveries (Best-Fit Decreasing by weight and volume)
+    normalized_deliveries.sort(key=lambda x: (x['weight'], x['volume_m3']), reverse=True)
+
+    # Capacity-Constrained Greedy Geographic Bin Allocation
+    for item in normalized_deliveries:
+        best_courier = None
+        min_marginal_cost = float('inf')
+        
+        for c in courier_state:
+            # Check capacity constraints (both weight and volume)
+            if (c['current_weight'] + item['weight'] <= c['capacity_weight'] + 1e-6) and \
+               (c['current_volume'] + item['volume_m3'] <= c['capacity_volume'] + 1e-6):
+                
+                # Proximity metric: distance from courier origin or nearest assigned stop
+                if not c['assigned_items']:
+                    cost = calculate_location_distance({'lat': c['lat'], 'lng': c['lng']}, item)
+                else:
+                    cost = min(calculate_location_distance(stop, item) for stop in c['assigned_items'])
+                    
+                if cost < min_marginal_cost:
+                    min_marginal_cost = cost
+                    best_courier = c
+                    
+        if best_courier is not None:
+            best_courier['assigned_items'].append(item)
+            best_courier['current_weight'] += item['weight']
+            best_courier['current_volume'] += item['volume_m3']
+        else:
+            unassigned.append({
+                'parcel_id': item['parcel_id'],
+                'tracking_id': item['tracking_id'],
+                'receiver_name': item['receiver_name'],
+                'delivery_address': item['delivery_address'],
+                'lat': item['lat'],
+                'lng': item['lng'],
+                'weight': round(item['weight'], 2),
+                'volume_m3': round(item['volume_m3'], 4),
+                'reason': 'Exceeds available fleet weight or volume capacity'
+            })
+
+    # Build optimized TSP routes for each courier
+    courier_routes = []
+    total_fleet_dist = 0.0
+
+    for c in courier_state:
+        if not c['assigned_items']:
+            continue
+            
+        start_loc = {
+            'lat': c['lat'],
+            'lng': c['lng'],
+            'name': f"Courier Start ({c['name']})"
+        }
+        
+        # Run TSP to get optimal order of stops
+        ordered_stops, tsp_distance, legs = solve_tsp(start_loc, c['assigned_items'])
+        total_fleet_dist += tsp_distance
+        
+        # Build full polyline road coordinates for map
+        full_route_coords = []
+        for leg in legs:
+            sub_coords = fetch_osrm_route(leg['from_lat'], leg['from_lng'], leg['to_lat'], leg['to_lng'])
+            if full_route_coords and sub_coords:
+                full_route_coords.extend(sub_coords[1:])
+            else:
+                full_route_coords.extend(sub_coords)
+                
+        # Calculate load statistics
+        assigned_w = round(c['current_weight'], 2)
+        assigned_v = round(c['current_volume'], 4)
+        rem_w = round(max(0.0, c['capacity_weight'] - c['current_weight']), 2)
+        rem_v = round(max(0.0, c['capacity_volume'] - c['current_volume']), 4)
+        util_w = round((assigned_w / c['capacity_weight']) * 100.0, 1) if c['capacity_weight'] > 0 else 0.0
+        util_v = round((assigned_v / c['capacity_volume']) * 100.0, 1) if c['capacity_volume'] > 0 else 0.0
+        
+        # Estimated duration (average urban speed 25 km/h + 5 mins per drop)
+        est_duration = round((tsp_distance / 25.0) * 60.0 + (len(ordered_stops) * 5), 1)
+
+        courier_routes.append({
+            'courier_id': c['id'],
+            'courier_name': c['name'],
+            'courier_phone': c['phone'],
+            'courier_lat': c['lat'],
+            'courier_lng': c['lng'],
+            'vehicle_type': c['vehicle_type'],
+            'license_plate': c['license_plate'],
+            'vehicle_code': c['vehicle_code'],
+            'color': c['color'],
+            'capacity_weight': c['capacity_weight'],
+            'capacity_volume': c['capacity_volume'],
+            'assigned_weight': assigned_w,
+            'assigned_volume': assigned_v,
+            'remaining_weight': rem_w,
+            'remaining_volume': rem_v,
+            'utilization_weight_pct': util_w,
+            'utilization_volume_pct': util_v,
+            'total_stops': len(ordered_stops),
+            'total_distance_km': tsp_distance,
+            'estimated_duration_min': est_duration,
+            'ordered_stops': ordered_stops,
+            'legs': legs,
+            'route_polyline': full_route_coords
+        })
+
+    assigned_count = sum(len(c['ordered_stops']) for c in courier_routes)
+
+    return {
+        'summary': {
+            'total_deliveries': len(deliveries),
+            'assigned_count': assigned_count,
+            'unassigned_count': len(unassigned),
+            'total_couriers_used': len(courier_routes),
+            'total_distance_km': round(total_fleet_dist, 2)
+        },
+        'courier_routes': courier_routes,
+        'unassigned_deliveries': unassigned
+    }

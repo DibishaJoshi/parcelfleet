@@ -18,14 +18,15 @@ from barcode.writer import ImageWriter
 # Models and Database
 from models import (
     db, User, Driver, Parcel, TrackingHistory, NotificationLog, Hub, HubAdmin,
-    Vehicle, VehicleMaintenance, Assignment, Manifest, ManifestItem, Shipper, Consignee, Merchandise
+    Vehicle, VehicleMaintenance, Assignment, Manifest, ManifestItem, Merchandise
 )
 
 # Algorithms
 from algorithms import (
     HUBS, GRAPH, dijkstra, greedy_driver_assignment, get_route_coordinates,
     haversine_distance, get_closest_hub, get_route_segments, fetch_osrm_route,
-    fetch_osrm_routes_with_alternatives, get_all_hubs_dict
+    fetch_osrm_routes_with_alternatives, get_all_hubs_dict,
+    multi_courier_optimization, solve_tsp, calculate_location_distance, COURIER_PALETTE
 )
 
 def validate_phone(phone):
@@ -792,131 +793,7 @@ def complete_manifest(id):
     flash(f"Manifest {manifest.manifest_number} marked as Completed.", "success")
     return redirect(url_for('manifest_details', id=manifest.id))
 
-# --- SHIPPER, CONSIGNEE & MERCHANDISE MODULES ---
-
-@app.route('/admin/shippers')
-@login_required
-def manage_shippers():
-    shippers = Shipper.query.all()
-    return render_template('shippers.html', active_page='shippers', shippers=shippers)
-
-@app.route('/admin/add-shipper', methods=['POST'])
-@login_required
-def add_shipper():
-    company_name = request.form.get('company_name', '').strip()
-    contact_person = request.form.get('contact_person', '').strip()
-    phone = request.form.get('phone', '').strip()
-    email = request.form.get('email', '').strip()
-    address = request.form.get('address', '').strip()
-    credit_limit = float(request.form.get('credit_limit', 0.0))
-    
-    if not company_name or not contact_person or not phone:
-        flash("Company Name, Contact Person, and Phone are required.", "error")
-        return redirect(url_for('manage_shippers'))
-        
-    # Prevent duplicate shippers
-    existing_name = Shipper.query.filter_by(company_name=company_name).first()
-    if existing_name:
-        flash(f"Validation Error: Shipper Company Name '{company_name}' is already registered.", "error")
-        return redirect(url_for('manage_shippers'))
-        
-    existing_phone = Shipper.query.filter_by(phone=phone).first()
-    if existing_phone:
-        flash(f"Validation Error: Shipper phone '{phone}' is already registered.", "error")
-        return redirect(url_for('manage_shippers'))
-        
-    if email:
-        existing_email = Shipper.query.filter_by(email=email).first()
-        if existing_email:
-            flash(f"Validation Error: Shipper email '{email}' is already registered.", "error")
-            return redirect(url_for('manage_shippers'))
-            
-    shipper = Shipper(
-        company_name=company_name,
-        contact_person=contact_person,
-        phone=phone,
-        email=email if email else None,
-        address=address,
-        credit_limit=credit_limit
-    )
-    db.session.add(shipper)
-    db.session.commit()
-    
-    flash(f"Shipper '{company_name}' registered successfully!", "success")
-    return redirect(url_for('manage_shippers'))
-
-@app.route('/admin/edit-shipper/<int:id>', methods=['POST'])
-@login_required
-def edit_shipper(id):
-    s = Shipper.query.get_or_404(id)
-    s.company_name = request.form.get('company_name', '').strip()
-    s.contact_person = request.form.get('contact_person', '').strip()
-    s.phone = request.form.get('phone', '').strip()
-    s.email = request.form.get('email', '').strip()
-    s.address = request.form.get('address', '').strip()
-    s.credit_limit = float(request.form.get('credit_limit', 0.0))
-    s.outstanding_balance = float(request.form.get('outstanding_balance', 0.0))
-    
-    db.session.commit()
-    flash(f"Shipper '{s.company_name}' updated successfully!", "success")
-    return redirect(url_for('manage_shippers'))
-
-@app.route('/admin/consignees')
-@login_required
-def manage_consignees():
-    consignees = Consignee.query.all()
-    return render_template('consignees.html', active_page='consignees', consignees=consignees)
-
-@app.route('/admin/add-consignee', methods=['POST'])
-@login_required
-def add_consignee():
-    name = request.form.get('name', '').strip()
-    phone = request.form.get('phone', '').strip()
-    address = request.form.get('address', '').strip()
-    city = request.form.get('city', 'Kathmandu').strip()
-    delivery_instructions = request.form.get('delivery_instructions', '').strip()
-    
-    if not name or not phone or not address:
-        flash("Name, Phone, and Address are required.", "error")
-        return redirect(url_for('manage_consignees'))
-        
-    # Prevent duplicate consignees
-    existing_name = Consignee.query.filter_by(name=name).first()
-    if existing_name:
-        flash(f"Validation Error: Consignee Name '{name}' is already registered.", "error")
-        return redirect(url_for('manage_consignees'))
-        
-    existing_phone = Consignee.query.filter_by(phone=phone).first()
-    if existing_phone:
-        flash(f"Validation Error: Consignee phone '{phone}' is already registered.", "error")
-        return redirect(url_for('manage_consignees'))
-        
-    c = Consignee(
-        name=name,
-        phone=phone,
-        address=address,
-        city=city,
-        delivery_instructions=delivery_instructions
-    )
-    db.session.add(c)
-    db.session.commit()
-    
-    flash(f"Consignee '{name}' added to directory!", "success")
-    return redirect(url_for('manage_consignees'))
-
-@app.route('/admin/edit-consignee/<int:id>', methods=['POST'])
-@login_required
-def edit_consignee(id):
-    c = Consignee.query.get_or_404(id)
-    c.name = request.form.get('name', '').strip()
-    c.phone = request.form.get('phone', '').strip()
-    c.address = request.form.get('address', '').strip()
-    c.city = request.form.get('city', 'Kathmandu').strip()
-    c.delivery_instructions = request.form.get('delivery_instructions', '').strip()
-    
-    db.session.commit()
-    flash(f"Consignee '{c.name}' updated!", "success")
-    return redirect(url_for('manage_consignees'))
+# --- MERCHANDISE MODULE ---
 
 @app.route('/admin/merchandise')
 @login_required
@@ -1454,6 +1331,154 @@ def run_fcfs_dispatch():
     flash(f"FCFS Auto-dispatch complete! Assigned {dispatched_count} orders.", "success")
     return redirect(url_for('admin_dashboard'))
 
+# --- MULTI-COURIER DELIVERY OPTIMIZATION MODULE ---
+
+@app.route('/admin/delivery-optimization')
+@login_required
+def delivery_optimization():
+    if current_user.role not in ['admin', 'hub_admin', 'dispatcher', 'booking_staff']:
+        return redirect(url_for('index'))
+        
+    hub_name = get_current_hub_name()
+    hubs = Hub.query.all()
+    
+    # Query pending parcels
+    if hub_name:
+        pending_parcels = Parcel.query.filter_by(status='Pending').filter(
+            (Parcel.pickup_hub == hub_name) | (Parcel.delivery_hub == hub_name)
+        ).order_by(Parcel.created_at.asc()).all()
+        available_drivers = Driver.query.filter(
+            Driver.availability == 'Available'
+        ).all()
+        # Prefer drivers at current hub if assigned
+        hub_drivers = [d for d in available_drivers if d.hub and d.hub.name == hub_name]
+        if hub_drivers:
+            available_drivers = hub_drivers
+    else:
+        pending_parcels = Parcel.query.filter_by(status='Pending').order_by(Parcel.created_at.asc()).all()
+        available_drivers = Driver.query.filter_by(availability='Available').all()
+        
+    # Run multi-courier optimization algorithm
+    optimization_result = multi_courier_optimization(available_drivers, pending_parcels)
+    
+    return render_template(
+        'delivery_optimization.html',
+        active_page='optimization',
+        optimization_result=optimization_result,
+        pending_parcels=pending_parcels,
+        available_drivers=available_drivers,
+        hubs=hubs,
+        hub_name=hub_name
+    )
+
+@app.route('/api/optimize-dispatch')
+@login_required
+def api_optimize_dispatch():
+    hub_name = get_current_hub_name()
+    if hub_name:
+        pending_parcels = Parcel.query.filter_by(status='Pending').filter(
+            (Parcel.pickup_hub == hub_name) | (Parcel.delivery_hub == hub_name)
+        ).order_by(Parcel.created_at.asc()).all()
+        available_drivers = Driver.query.filter(
+            Driver.availability == 'Available'
+        ).all()
+        hub_drivers = [d for d in available_drivers if d.hub and d.hub.name == hub_name]
+        if hub_drivers:
+            available_drivers = hub_drivers
+    else:
+        pending_parcels = Parcel.query.filter_by(status='Pending').order_by(Parcel.created_at.asc()).all()
+        available_drivers = Driver.query.filter_by(availability='Available').all()
+        
+    result = multi_courier_optimization(available_drivers, pending_parcels)
+    return jsonify(result)
+
+@app.route('/admin/execute-multi-dispatch', methods=['POST'])
+@login_required
+def execute_multi_dispatch():
+    if current_user.role not in ['admin', 'hub_admin', 'dispatcher']:
+        return redirect(url_for('index'))
+        
+    hub_name = get_current_hub_name()
+    if hub_name:
+        pending_parcels = Parcel.query.filter_by(status='Pending').filter(
+            (Parcel.pickup_hub == hub_name) | (Parcel.delivery_hub == hub_name)
+        ).order_by(Parcel.created_at.asc()).all()
+        available_drivers = Driver.query.filter(
+            Driver.availability == 'Available'
+        ).all()
+        hub_drivers = [d for d in available_drivers if d.hub and d.hub.name == hub_name]
+        if hub_drivers:
+            available_drivers = hub_drivers
+    else:
+        pending_parcels = Parcel.query.filter_by(status='Pending').order_by(Parcel.created_at.asc()).all()
+        available_drivers = Driver.query.filter_by(availability='Available').all()
+        
+    if not pending_parcels:
+        flash("No pending parcels available to dispatch.", "info")
+        return redirect(url_for('delivery_optimization'))
+        
+    if not available_drivers:
+        flash("No available couriers in service.", "warning")
+        return redirect(url_for('delivery_optimization'))
+        
+    # Run optimization
+    optimization_result = multi_courier_optimization(available_drivers, pending_parcels)
+    
+    total_assigned_parcels = 0
+    couriers_dispatched = 0
+    
+    for route in optimization_result['courier_routes']:
+        driver = Driver.query.get(route['courier_id'])
+        if not driver:
+            continue
+            
+        driver.availability = 'On Delivery'
+        driver.status = 'On Delivery'
+        couriers_dispatched += 1
+        
+        for stop in route['ordered_stops']:
+            parcel = Parcel.query.get(stop['parcel_id'])
+            if parcel and parcel.status == 'Pending':
+                parcel.assigned_driver_id = driver.id
+                parcel.status = 'Assigned'
+                
+                # History & Notification logs
+                hist = TrackingHistory(
+                    parcel_id=parcel.id,
+                    status='Assigned',
+                    location=f"Assigned to {driver.name} (Stop #{stop['stop_number']} of {route['total_stops']})"
+                )
+                notif = NotificationLog(
+                    parcel_id=parcel.id,
+                    message=f"TSP Optimized: Dispatched to courier {driver.name} (Stop #{stop['stop_number']}).",
+                    type='Assigned'
+                )
+                db.session.add(hist)
+                db.session.add(notif)
+                total_assigned_parcels += 1
+                
+        # Record Vehicle Assignment if driver has assigned vehicle
+        if driver.assigned_vehicle_id:
+            asg = Assignment(
+                driver_id=driver.id,
+                vehicle_id=driver.assigned_vehicle_id,
+                assignment_status='Active',
+                hub_id=driver.hub_id
+            )
+            db.session.add(asg)
+            
+    db.session.commit()
+    
+    unassigned_count = optimization_result['summary']['unassigned_count']
+    msg = f"Multi-Courier Optimization Complete! Dispatched {total_assigned_parcels} deliveries across {couriers_dispatched} couriers."
+    if unassigned_count > 0:
+        msg += f" {unassigned_count} deliveries remain unassigned due to fleet capacity limits."
+        flash(msg, "warning")
+    else:
+        flash(msg, "success")
+        
+    return redirect(url_for('delivery_optimization'))
+
 @app.route('/admin/drivers')
 @login_required
 def manage_drivers():
@@ -1918,18 +1943,54 @@ def update_parcel_status_driver(id):
 def customer_tracking_view():
     tracking_id = request.args.get('tracking_id')
     parcel = None
+    manifest = None
     error = False
     if tracking_id:
-        parcel = Parcel.query.filter_by(tracking_id=tracking_id.strip()).first()
+        tid = tracking_id.strip()
+        parcel = Parcel.query.filter_by(tracking_id=tid).first()
         if not parcel:
-            error = True
-    return render_template('customer_tracking.html', tracking_id=tracking_id, parcel=parcel, error=error, no_layout=True)
+            manifest = Manifest.query.filter_by(manifest_number=tid).first()
+            if not manifest:
+                error = True
+    return render_template('customer_tracking.html', tracking_id=tracking_id, parcel=parcel, manifest=manifest, error=error, no_layout=True)
 
 @app.route('/parcel/<int:id>/label')
 @login_required
 def print_shipping_label(id):
     parcel = Parcel.query.get_or_404(id)
     return render_template('shipping_label.html', parcel=parcel, no_layout=True)
+
+@app.route('/api/barcode/<tracking_id>')
+def generate_barcode_api(tracking_id):
+    try:
+        code128 = barcode.get('code128', tracking_id, writer=ImageWriter())
+        buffer = BytesIO()
+        code128.write(buffer, options={'write_text': False, 'quiet_zone': 1})
+        buffer.seek(0)
+        return send_file(buffer, mimetype='image/png')
+    except Exception:
+        from barcode.writer import SVGWriter
+        code128 = barcode.get('code128', tracking_id, writer=SVGWriter())
+        buffer = BytesIO()
+        code128.write(buffer, options={'write_text': False, 'quiet_zone': 1})
+        buffer.seek(0)
+        return send_file(buffer, mimetype='image/svg+xml')
+
+@app.route('/api/qrcode/<tracking_id>')
+def generate_qrcode_api(tracking_id):
+    qr = qrcode.QRCode(
+        version=1,
+        error_correction=qrcode.constants.ERROR_CORRECT_L,
+        box_size=6,
+        border=1,
+    )
+    qr.add_data(tracking_id)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="black", back_color="white")
+    buffer = BytesIO()
+    img.save(buffer, format='PNG')
+    buffer.seek(0)
+    return send_file(buffer, mimetype='image/png')
 
 @app.route('/parcel/<int:id>/proof')
 def view_proof_of_delivery(id):
@@ -1945,23 +2006,37 @@ def uploaded_file(filename):
 @app.route('/api/admin/analytics')
 @login_required
 def api_admin_analytics():
-    parcels = Parcel.query.all()
-    status_counts = {'Pending': 0, 'Assigned': 0, 'Picked Up': 0, 'In Transit': 0, 'Out For Delivery': 0, 'Delivered': 0, 'Cancelled': 0}
+    if current_user.role not in ['admin', 'hub_admin', 'dispatcher']:
+        return jsonify({'error': 'Unauthorized'}), 401
+        
+    hub_name = get_current_hub_name()
+    if hub_name:
+        parcels = Parcel.query.filter((Parcel.pickup_hub == hub_name) | (Parcel.delivery_hub == hub_name)).all()
+    else:
+        parcels = Parcel.query.all()
+        
+    status_counts = {}
     for p in parcels:
-        if p.status in status_counts:
-            status_counts[p.status] += 1
-            
-    months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun"]
-    counts = [12, 18, 25, 34, 42, 54]
-    counts[-1] = status_counts['Delivered'] + status_counts['In Transit']
+        status_counts[p.status] = status_counts.get(p.status, 0) + 1
+        
+    hub_dist = {}
+    for p in parcels:
+        hub_dist[p.pickup_hub] = hub_dist.get(p.pickup_hub, 0) + 1
+        
+    drivers = Driver.query.all()
+    driver_stats = [{
+        'name': d.name,
+        'completed': d.completed_deliveries,
+        'status': d.availability
+    } for d in drivers]
     
     return jsonify({
         'status_counts': status_counts,
-        'monthly_trends': {'labels': months, 'counts': counts}
+        'hub_distribution': hub_dist,
+        'driver_stats': driver_stats
     })
 
 @app.route('/api/admin/drivers-location')
-@login_required
 def api_drivers_location():
     drivers = Driver.query.all()
     data = [{
@@ -1978,9 +2053,13 @@ def api_drivers_location():
 @app.route('/api/parcel/<tracking_id>/route')
 def api_parcel_route(tracking_id):
     parcel = Parcel.query.filter_by(tracking_id=tracking_id).first_or_404()
+    
+    driver = parcel.assigned_driver or (parcel.manifest.assigned_driver if parcel.manifest else None)
+    vehicle = (driver.assigned_vehicle if driver and driver.assigned_vehicle else None) or (parcel.manifest.assigned_vehicle if parcel.manifest else None)
+    
     driver_coords = None
-    if parcel.assigned_driver and parcel.assigned_driver.latitude and parcel.assigned_driver.longitude:
-        driver_coords = {'lat': parcel.assigned_driver.latitude, 'lng': parcel.assigned_driver.longitude}
+    if driver and driver.latitude and driver.longitude:
+        driver_coords = {'lat': driver.latitude, 'lng': driver.longitude}
         
     hubs_dict = get_all_hubs_dict()
     pickup_hub = hubs_dict.get(parcel.pickup_hub)
@@ -2007,12 +2086,14 @@ def api_parcel_route(tracking_id):
         end_lat, end_lng, end_name = parcel.delivery_latitude, parcel.delivery_longitude, 'Home Delivery'
         
     driver_data = None
-    if parcel.assigned_driver:
+    if driver:
         driver_data = {
-            'name': parcel.assigned_driver.name,
-            'vehicle': parcel.assigned_driver.vehicle_number,
-            'lat': parcel.assigned_driver.latitude,
-            'lng': parcel.assigned_driver.longitude
+            'name': driver.name,
+            'vehicle': vehicle.vehicle_code if vehicle else driver.vehicle_number,
+            'vehicle_plate': vehicle.license_plate if vehicle else driver.vehicle_number,
+            'vehicle_type': vehicle.vehicle_type if vehicle else 'Bike',
+            'lat': driver.latitude,
+            'lng': driver.longitude
         }
 
     routes = fetch_osrm_routes_with_alternatives(start_lat, start_lng, end_lat, end_lng)
@@ -2068,12 +2149,13 @@ def api_parcel_telemetry(tracking_id):
     pickup_hub_name = get_closest_hub(parcel.pickup_latitude, parcel.pickup_longitude)
     delivery_hub_name = get_closest_hub(parcel.delivery_latitude, parcel.delivery_longitude)
     
+    driver = parcel.assigned_driver or (parcel.manifest.assigned_driver if parcel.manifest else None)
+    
     if parcel.status == 'Delivered':
         progress_percent = 100.0
     elif parcel.status == 'Cancelled':
         progress_percent = 0.0
-    elif parcel.assigned_driver:
-        driver = parcel.assigned_driver
+    elif driver:
         distance_remaining_km = haversine_distance(driver.latitude, driver.longitude, dest_lat, dest_lng)
         path, total_dist = dijkstra(pickup_hub_name, delivery_hub_name)
         hubs_dict = get_all_hubs_dict()
@@ -2090,7 +2172,7 @@ def api_parcel_telemetry(tracking_id):
         elif parcel.status == 'Picked Up':
             progress_percent = 20.0
             eta_minutes = int((total_dist_home_to_home / 25.0) * 60)
-        elif parcel.status == 'In Transit':
+        elif parcel.status in ['In Transit', 'Manifested']:
             progress_percent = 45.0
             speed_kmh = 32.0
             eta_minutes = int((distance_remaining_km / 25.0) * 60)
@@ -2127,10 +2209,174 @@ def api_parcel_telemetry(tracking_id):
         'distance_remaining_km': distance_remaining_km,
         'eta_minutes': eta_minutes,
         'speed_kmh': speed_kmh,
-        'driver_latitude': parcel.assigned_driver.latitude if parcel.assigned_driver else None,
-        'driver_longitude': parcel.assigned_driver.longitude if parcel.assigned_driver else None,
+        'driver_latitude': driver.latitude if driver else None,
+        'driver_longitude': driver.longitude if driver else None,
         'notifications': notifications
     })
+
+# --- MANIFEST / GROUP SHIPMENT TELEMETRY APIs ---
+
+@app.route('/api/manifest/<int:id>/route')
+def api_manifest_route(id):
+    manifest = Manifest.query.get_or_404(id)
+    origin_hub = manifest.origin_hub
+    dest_hub = manifest.destination_hub
+    
+    if not origin_hub or not dest_hub:
+        return jsonify({'error': 'Invalid hubs'}), 400
+        
+    driver = manifest.assigned_driver
+    vehicle = manifest.assigned_vehicle
+    
+    driver_data = None
+    if driver:
+        driver_data = {
+            'name': driver.name,
+            'vehicle': vehicle.vehicle_code if vehicle else driver.vehicle_number,
+            'vehicle_plate': vehicle.license_plate if vehicle else driver.vehicle_number,
+            'vehicle_type': vehicle.vehicle_type if vehicle else 'Truck',
+            'lat': driver.latitude,
+            'lng': driver.longitude
+        }
+        
+    # Get OSRM road route between origin hub and destination hub
+    start_lat, start_lng = origin_hub.latitude, origin_hub.longitude
+    end_lat, end_lng = dest_hub.latitude, dest_hub.longitude
+    
+    routes = fetch_osrm_routes_with_alternatives(start_lat, start_lng, end_lat, end_lng)
+    recommended_route_pts = routes[0]['coordinates'] if routes else []
+    
+    segments = [{
+        'from': f"{origin_hub.name} Hub",
+        'to': f"{dest_hub.name} Hub",
+        'coordinates': recommended_route_pts,
+        'traffic': 'Moderate',
+        'condition': 'Inter-hub freight transit route',
+        'color': '#2563EB',
+        'speed_limit': 60
+    }]
+    
+    return jsonify({
+        'manifest_number': manifest.manifest_number,
+        'origin': {'name': f"{origin_hub.name} Hub", 'lat': origin_hub.latitude, 'lng': origin_hub.longitude},
+        'destination': {'name': f"{dest_hub.name} Hub", 'lat': dest_hub.latitude, 'lng': dest_hub.longitude},
+        'status': manifest.manifest_status,
+        'path': recommended_route_pts,
+        'segments': segments,
+        'driver': driver_data,
+        'total_parcels': manifest.total_parcels,
+        'total_weight': manifest.total_weight
+    })
+
+@app.route('/api/manifest/<int:id>/telemetry')
+def api_manifest_telemetry(id):
+    manifest = Manifest.query.get_or_404(id)
+    origin_hub = manifest.origin_hub
+    dest_hub = manifest.destination_hub
+    
+    distance_remaining_km = 0.0
+    eta_minutes = 0
+    speed_kmh = 0.0
+    progress_percent = 0.0
+    
+    total_dist = haversine_distance(origin_hub.latitude, origin_hub.longitude, dest_hub.latitude, dest_hub.longitude) if origin_hub and dest_hub else 10.0
+    
+    if manifest.manifest_status == 'Completed':
+        progress_percent = 100.0
+        speed_kmh = 0.0
+        distance_remaining_km = 0.0
+        eta_minutes = 0
+    elif manifest.manifest_status == 'Dispatched':
+        progress_percent = 50.0
+        speed_kmh = 42.0
+        if manifest.assigned_driver and dest_hub:
+            driver = manifest.assigned_driver
+            distance_remaining_km = haversine_distance(driver.latitude, driver.longitude, dest_hub.latitude, dest_hub.longitude)
+            eta_minutes = max(2, int((distance_remaining_km / 40.0) * 60))
+            if total_dist > 0:
+                progress_percent = min(95.0, max(10.0, ((total_dist - distance_remaining_km) / total_dist) * 100.0))
+        else:
+            distance_remaining_km = total_dist
+            eta_minutes = max(5, int((total_dist / 40.0) * 60))
+    else: # Draft or Created
+        progress_percent = 0.0
+        distance_remaining_km = total_dist
+        eta_minutes = int((total_dist / 40.0) * 60) + 10
+        
+    return jsonify({
+        'manifest_number': manifest.manifest_number,
+        'status': manifest.manifest_status,
+        'progress_percent': round(progress_percent, 1),
+        'distance_remaining_km': round(distance_remaining_km, 2),
+        'eta_minutes': eta_minutes,
+        'speed_kmh': speed_kmh,
+        'driver_latitude': manifest.assigned_driver.latitude if manifest.assigned_driver else None,
+        'driver_longitude': manifest.assigned_driver.longitude if manifest.assigned_driver else None
+    })
+
+# --- DRIVER GPS & ROUTING APIs ---
+
+@app.route('/api/driver/update-location', methods=['POST'])
+@app.route('/api/driver/location', methods=['POST'])
+@login_required
+def api_driver_update_location():
+    if current_user.role != 'driver':
+        return jsonify({'error': 'Unauthorized'}), 401
+        
+    driver = Driver.query.filter_by(user_id=current_user.id).first_or_404()
+    data = request.get_json() or {}
+    
+    lat = data.get('latitude')
+    lng = data.get('longitude')
+    availability = data.get('availability') or data.get('state')
+    
+    updated = False
+    if lat is not None and lng is not None:
+        try:
+            lat = float(lat)
+            lng = float(lng)
+            if not (lat == 0.0 and lng == 0.0):
+                driver.latitude = lat
+                driver.longitude = lng
+                updated = True
+        except (TypeError, ValueError):
+            pass
+            
+    if availability in ['Available', 'On Delivery', 'On Break', 'Offline']:
+        driver.availability = availability
+        driver.status = availability
+        updated = True
+        
+    if updated:
+        db.session.commit()
+    
+    return jsonify({
+        'success': True,
+        'driver_id': driver.id,
+        'name': driver.name,
+        'latitude': driver.latitude,
+        'longitude': driver.longitude,
+        'availability': driver.availability,
+        'updated_at': datetime.utcnow().isoformat()
+    })
+
+@app.route('/api/driver/update-state', methods=['POST'])
+@login_required
+def api_driver_update_state():
+    if current_user.role != 'driver':
+        return jsonify({'error': 'Unauthorized'}), 401
+        
+    driver = Driver.query.filter_by(user_id=current_user.id).first_or_404()
+    data = request.get_json() or {}
+    state = data.get('state')
+    
+    if state in ['Available', 'On Delivery', 'On Break', 'Offline']:
+        driver.availability = state
+        driver.status = state
+        db.session.commit()
+        return jsonify({'success': True, 'state': state})
+        
+    return jsonify({'error': 'Invalid state'}), 400
 
 @app.route('/api/driver/active-route')
 @login_required
@@ -2139,24 +2385,125 @@ def api_driver_active_route():
         return jsonify({'error': 'Unauthorized'}), 401
         
     driver = Driver.query.filter_by(user_id=current_user.id).first_or_404()
-    parcel = Parcel.query.filter_by(assigned_driver_id=driver.id).filter(Parcel.status.in_(['In Transit', 'Out For Delivery'])).first()
-    if not parcel:
-        return jsonify({'coordinates': []})
+    vehicle = driver.assigned_vehicle
+    
+    driver_data = {
+        'id': driver.id,
+        'name': driver.name,
+        'phone': driver.phone,
+        'lat': driver.latitude,
+        'lng': driver.longitude,
+        'vehicle': vehicle.vehicle_code if vehicle else driver.vehicle_number,
+        'vehicle_plate': vehicle.license_plate if vehicle else driver.vehicle_number,
+        'vehicle_type': vehicle.vehicle_type if vehicle else 'Bike',
+        'availability': driver.availability
+    }
+    
+    # 1. Check if driver has an active dispatched freight manifest
+    dispatched_manifest = Manifest.query.filter_by(assigned_driver_id=driver.id, manifest_status='Dispatched').first()
+    if dispatched_manifest and dispatched_manifest.origin_hub and dispatched_manifest.destination_hub:
+        routes = fetch_osrm_routes_with_alternatives(
+            driver.latitude, driver.longitude,
+            dispatched_manifest.destination_hub.latitude, dispatched_manifest.destination_hub.longitude
+        )
+        rec_route = routes[0] if routes else {
+            'coordinates': [{'lat': driver.latitude, 'lng': driver.longitude}, {'lat': dispatched_manifest.destination_hub.latitude, 'lng': dispatched_manifest.destination_hub.longitude}],
+            'distance_km': haversine_distance(driver.latitude, driver.longitude, dispatched_manifest.destination_hub.latitude, dispatched_manifest.destination_hub.longitude),
+            'duration_min': 15.0
+        }
         
-    pickup_hub_name = get_closest_hub(parcel.pickup_latitude, parcel.pickup_longitude)
-    delivery_hub_name = get_closest_hub(parcel.delivery_latitude, parcel.delivery_longitude)
-    path, cost = dijkstra(pickup_hub_name, delivery_hub_name)
+        return jsonify({
+            'type': 'manifest',
+            'driver': driver_data,
+            'manifest_number': dispatched_manifest.manifest_number,
+            'origin': {'name': f"{dispatched_manifest.origin_hub.name} Hub", 'lat': dispatched_manifest.origin_hub.latitude, 'lng': dispatched_manifest.origin_hub.longitude},
+            'destination': {'name': f"{dispatched_manifest.destination_hub.name} Hub", 'lat': dispatched_manifest.destination_hub.latitude, 'lng': dispatched_manifest.destination_hub.longitude},
+            'coordinates': rec_route['coordinates'],
+            'distance_km': rec_route.get('distance_km', 0.0),
+            'duration_min': rec_route.get('duration_min', 0.0),
+            'stops': [
+                {
+                    'stop_number': 1,
+                    'name': f"Destination: {dispatched_manifest.destination_hub.name} Hub",
+                    'lat': dispatched_manifest.destination_hub.latitude,
+                    'lng': dispatched_manifest.destination_hub.longitude,
+                    'type': 'hub'
+                }
+            ]
+        })
+
+    # 2. Check active parcel deliveries assigned to driver
+    active_parcels = Parcel.query.filter_by(assigned_driver_id=driver.id).filter(
+        Parcel.status.in_(['Assigned', 'Picked Up', 'In Transit', 'Out For Delivery'])
+    ).order_by(Parcel.created_at.asc()).all()
     
-    pickup_coords = {'lat': parcel.pickup_latitude, 'lng': parcel.pickup_longitude}
-    delivery_coords = {'lat': parcel.delivery_latitude, 'lng': parcel.delivery_longitude}
-    segments = get_route_segments(path, pickup_coords, delivery_coords)
-    
-    smooth_coords = []
-    for seg in segments:
-        for pt in seg['coordinates']:
-            smooth_coords.append({'lat': pt['lat'], 'lng': pt['lng']})
+    if not active_parcels:
+        return jsonify({
+            'type': 'idle',
+            'driver': driver_data,
+            'coordinates': [],
+            'stops': [],
+            'distance_km': 0.0,
+            'duration_min': 0.0
+        })
+
+    # Build stops and determine targets
+    driver_start = {'lat': driver.latitude, 'lng': driver.longitude, 'name': f"My Location ({driver.name})"}
+    stops_input = []
+    for p in active_parcels:
+        # If parcel not picked up yet, target is pickup location / pickup hub
+        if p.status == 'Assigned':
+            stop_lat = p.pickup_latitude
+            stop_lng = p.pickup_longitude
+            stop_addr = p.pickup_address
+            stop_action = 'Pick Up from Sender'
+        else:
+            stop_lat = p.delivery_latitude
+            stop_lng = p.delivery_longitude
+            stop_addr = p.delivery_address
+            stop_action = 'Deliver to Recipient'
             
-    return jsonify({'coordinates': smooth_coords})
+        stops_input.append({
+            'parcel_id': p.id,
+            'tracking_id': p.tracking_id,
+            'receiver_name': p.receiver_name,
+            'receiver_phone': p.receiver_phone,
+            'sender_name': p.sender_name,
+            'sender_phone': p.sender_phone,
+            'delivery_address': stop_addr,
+            'lat': stop_lat,
+            'lng': stop_lng,
+            'weight': p.weight,
+            'status': p.status,
+            'action_type': stop_action,
+            'payment_status': p.payment_status,
+            'delivery_charge': p.delivery_charge
+        })
+
+    # Run TSP to sequence multiple stops optimally from driver's current GPS location
+    ordered_stops, total_dist, legs = solve_tsp(driver_start, stops_input)
+    
+    # Generate continuous turn-by-turn road polyline through all stops
+    full_route_pts = []
+    for leg in legs:
+        leg_pts = fetch_osrm_route(leg['from_lat'], leg['from_lng'], leg['to_lat'], leg['to_lng'])
+        if full_route_pts and leg_pts:
+            full_route_pts.extend(leg_pts[1:])
+        else:
+            full_route_pts.extend(leg_pts)
+            
+    est_duration = round((total_dist / 25.0) * 60.0 + (len(ordered_stops) * 4), 1)
+
+    return jsonify({
+        'type': 'parcels',
+        'driver': driver_data,
+        'stops': ordered_stops,
+        'current_target': ordered_stops[0] if ordered_stops else None,
+        'coordinates': full_route_pts,
+        'distance_km': total_dist,
+        'duration_min': est_duration,
+        'legs': legs
+    })
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)

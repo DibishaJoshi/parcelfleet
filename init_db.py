@@ -5,7 +5,7 @@ import random
 # Import db and models
 from models import (
     db, User, Driver, Parcel, TrackingHistory, NotificationLog, Hub, HubAdmin,
-    Vehicle, VehicleMaintenance, Assignment, Manifest, ManifestItem, Shipper, Consignee, Merchandise
+    Vehicle, VehicleMaintenance, Assignment, Manifest, ManifestItem, Merchandise
 )
 from app import app  # Import app to use its database context
 
@@ -196,58 +196,7 @@ def seed_database():
         db.session.commit()
         print("Drivers seeded successfully!")
 
-        # 6. Seed Shippers, Consignees & Merchandise
-        shipper1 = Shipper(
-            company_name='Himalaya Tech Supplies',
-            contact_person='Dibisha Joshi',
-            phone='9841999999',
-            email='dibisha@himalayatech.com',
-            address='Bhaktapur Industrial Area',
-            billing_address='Bhaktapur Main Road',
-            credit_limit=50000.0,
-            outstanding_balance=12500.0,
-            status='Active',
-            hub_id=seeded_hubs['Bhaktapur'].id
-        )
-        shipper2 = Shipper(
-            company_name='Kathmandu Pharma Traders',
-            contact_person='Bir Medicals',
-            phone='9803123456',
-            email='sales@ktmpharma.com',
-            address='Lagankhel, Lalitpur',
-            billing_address='Lagankhel Plaza',
-            credit_limit=100000.0,
-            outstanding_balance=4500.0,
-            status='Active',
-            hub_id=seeded_hubs['Lagankhel'].id
-        )
-        db.session.add_all([shipper1, shipper2])
-
-        consignee1 = Consignee(
-            name='Ram Sharma',
-            phone='9801999999',
-            alternate_phone='9801999998',
-            address='Thamel Chowk, Kathmandu',
-            city='Kathmandu',
-            state='Bagmati',
-            country='Nepal',
-            postal_code='44600',
-            delivery_instructions='Deliver to 2nd floor reception.',
-            hub_id=thamel_hub.id
-        )
-        consignee2 = Consignee(
-            name='Anita Shrestha',
-            phone='9818456789',
-            address='New Baneshwor, Kathmandu',
-            city='Kathmandu',
-            state='Bagmati',
-            country='Nepal',
-            postal_code='44600',
-            delivery_instructions='Call before arrival.',
-            hub_id=seeded_hubs['New Baneshwor'].id
-        )
-        db.session.add_all([consignee1, consignee2])
-
+        # 6. Seed Merchandise
         m1 = Merchandise(type='Documents', category='Office Paperwork', description='Official contracts and files', weight=0.5, unit='kg', fragile=False, hazardous=False, default_charge=100.0)
         m2 = Merchandise(type='Electronics', category='Gadgets', description='Laptops, Smartphones, Microchips', weight=2.5, unit='kg', fragile=True, hazardous=False, default_charge=250.0)
         m3 = Merchandise(type='Medical Supplies', category='Healthcare', description='Therapeutic vaccines and medicines', weight=1.2, unit='kg', fragile=True, temperature_controlled=True, default_charge=200.0)
@@ -257,10 +206,10 @@ def seed_database():
         # 7. Seed Sample Parcels
         parcel1 = Parcel(
             tracking_id='PF20261001',
-            sender_name=shipper1.contact_person,
-            sender_phone=shipper1.phone,
-            receiver_name=consignee1.name,
-            receiver_phone=consignee1.phone,
+            sender_name='Dibisha Joshi',
+            sender_phone='9841999999',
+            receiver_name='Ram Sharma',
+            receiver_phone='9801999999',
             pickup_address='Bhaktapur',
             delivery_address='Thamel',
             pickup_latitude=27.6740,
@@ -279,8 +228,6 @@ def seed_database():
             payment_status='Paid',
             special_tags='Confidential Documents',
             hub_id=seeded_hubs['Bhaktapur'].id,
-            shipper_id=shipper1.id,
-            consignee_id=consignee1.id,
             merchandise_id=m1.id,
             expected_delivery_date=datetime.utcnow() + timedelta(days=1),
             created_at=datetime.utcnow() - timedelta(hours=3)
@@ -289,8 +236,8 @@ def seed_database():
             tracking_id='PF20261002',
             sender_name='Subash Pokhrel',
             sender_phone='9851122334',
-            receiver_name=consignee2.name,
-            receiver_phone=consignee2.phone,
+            receiver_name='Anita Shrestha',
+            receiver_phone='9818456789',
             pickup_address='Kalanki',
             delivery_address='New Baneshwor',
             pickup_latitude=27.6965,
@@ -309,7 +256,6 @@ def seed_database():
             payment_status='COD',
             special_tags='Fragile,Handle With Care',
             hub_id=kalanki_hub.id,
-            consignee_id=consignee2.id,
             merchandise_id=m2.id,
             expected_delivery_date=datetime.utcnow() + timedelta(days=1),
             created_at=datetime.utcnow() - timedelta(hours=2)
@@ -317,8 +263,8 @@ def seed_database():
         delivered_time = datetime.utcnow() - timedelta(minutes=45)
         parcel3 = Parcel(
             tracking_id='PF20261003',
-            sender_name=shipper2.company_name,
-            sender_phone=shipper2.phone,
+            sender_name='Bir Medicals',
+            sender_phone='9803123456',
             receiver_name='Koteshwor Clinic',
             receiver_phone='9849555666',
             pickup_address='Lagankhel',
@@ -339,7 +285,6 @@ def seed_database():
             payment_status='Paid',
             assigned_driver_id=driver2_profile.id,
             hub_id=seeded_hubs['Lagankhel'].id,
-            shipper_id=shipper2.id,
             merchandise_id=m3.id,
             created_at=datetime.utcnow() - timedelta(hours=5),
             delivered_at=delivered_time,

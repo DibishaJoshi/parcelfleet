@@ -58,8 +58,48 @@
         </div>
     </div>
 
-    <!-- ASSIGNED TASK LISTINGS -->
+    <!-- ASSIGNED TASK LISTINGS & LIVE MAP -->
     <div class="col-12 col-lg-8">
+        <!-- LIVE GPS NAVIGATION & ACTIVE ROAD ROUTE MAP -->
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header bg-white py-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge rounded-circle p-1 bg-success d-inline-block" style="width: 10px; height: 10px;"></span>
+                    <h5 class="fw-bold mb-0 text-dark"><i class="fa-solid fa-location-crosshairs text-primary me-2"></i>Live Navigation & Active Road Route</h5>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <span id="gpsStatusBadge" class="badge bg-success bg-opacity-10 text-success border border-success">
+                        <i class="fa-solid fa-satellite-dish me-1"></i>GPS Standby
+                    </span>
+                    <button type="button" class="btn btn-sm btn-outline-primary rounded-pill" id="btnRecenterGps" title="Recenter on My Location">
+                        <i class="fa-solid fa-crosshairs me-1"></i>My Location
+                    </button>
+                </div>
+            </div>
+            <div class="card-body p-0 position-relative">
+                <!-- Live Map Container -->
+                <div id="driverLiveMap" data-driver-lat="{{ driver.latitude or 27.6850 }}" data-driver-lng="{{ driver.longitude or 85.2050 }}" style="height: 360px; width: 100%; border-radius: 0;"></div>
+                
+                <!-- Live Route HUD Overlay -->
+                <div id="routeHudOverlay" class="position-absolute bottom-0 start-0 end-0 p-3 bg-dark bg-opacity-75 text-white d-flex flex-wrap justify-content-between align-items-center gap-3" style="backdrop-filter: blur(4px); z-index: 1000;">
+                    <div>
+                        <span class="small text-white-50 text-uppercase d-block" style="font-size: 0.7rem;">Next Destination / Action:</span>
+                        <strong id="hudTargetText" class="text-warning">Loading route...</strong>
+                    </div>
+                    <div class="d-flex gap-3 text-end">
+                        <div>
+                            <span class="small text-white-50 text-uppercase d-block" style="font-size: 0.7rem;">Distance:</span>
+                            <strong id="hudDistanceText" class="fs-6 text-white">-- km</strong>
+                        </div>
+                        <div>
+                            <span class="small text-white-50 text-uppercase d-block" style="font-size: 0.7rem;">Est. Time:</span>
+                            <strong id="hudEtaText" class="fs-6 text-success">-- mins</strong>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <h5 class="fw-bold text-dark mb-3"><i class="fas fa-list-check me-2 text-primary"></i>My Shipment Queue</h5>
         
         <!-- Tabs Navigation -->

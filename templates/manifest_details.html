@@ -1,122 +1,217 @@
 {% extends "base.html" %}
 
 {% block title %}Manifest Details {{ manifest.manifest_number }} - ParcelFleet{% endblock %}
-{% block page_title %}Manifest Details{% endblock %}
+{% block page_title %}Manifest Details & Live Tracking{% endblock %}
 
 {% block content %}
 <div class="container-fluid p-0">
+    <!-- Header Controls -->
     <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 gap-3">
         <div>
             <div class="d-flex align-items-center gap-2 mb-1">
-                <a href="{{ url_for('manage_manifests') }}" class="btn btn-sm btn-outline-secondary"><i class="fa-solid fa-arrow-left"></i></a>
+                <a href="{{ url_for('manage_manifests') }}" class="btn btn-sm btn-outline-secondary rounded-pill px-3"><i class="fa-solid fa-arrow-left me-1"></i>Back</a>
                 <h3 class="fw-bold mb-0">Manifest {{ manifest.manifest_number }}</h3>
-                <span class="badge {% if manifest.manifest_status == 'Dispatched' %}bg-warning text-dark{% elif manifest.manifest_status == 'Completed' %}bg-success{% else %}bg-secondary{% endif %}">
+                <span class="badge {% if manifest.manifest_status == 'Dispatched' %}bg-warning text-dark{% elif manifest.manifest_status == 'Completed' %}bg-success{% else %}bg-secondary{% endif %} rounded-pill px-3">
                     {{ manifest.manifest_status }}
                 </span>
             </div>
-            <p class="text-muted mb-0">Route: {{ manifest.origin_hub.name if manifest.origin_hub else 'N/A' }} &rarr; {{ manifest.destination_hub.name if manifest.destination_hub else 'N/A' }}</p>
+            <p class="text-muted mb-0">
+                <i class="fa-solid fa-route text-primary me-1"></i>Route: 
+                <strong>{{ manifest.origin_hub.name if manifest.origin_hub else 'N/A' }} Hub</strong> &rarr; 
+                <strong>{{ manifest.destination_hub.name if manifest.destination_hub else 'N/A' }} Hub</strong>
+            </p>
         </div>
         <div class="d-flex gap-2">
             {% if manifest.manifest_status in ['Draft', 'Created'] %}
-                <button class="btn btn-outline-primary d-inline-flex align-items-center gap-2" data-bs-toggle="modal" data-bs-target="#addParcelModal">
+                <button class="btn btn-outline-primary rounded-pill px-3 d-inline-flex align-items-center gap-2" data-bs-toggle="modal" data-bs-target="#addParcelModal">
                     <i class="fa-solid fa-box"></i>
                     <span>Attach Parcel</span>
                 </button>
-                <form action="{{ url_for('dispatch_manifest', id=manifest.id) }}" method="POST">
-                    <button type="submit" class="btn btn-warning d-inline-flex align-items-center gap-2 text-dark fw-semibold" {% if manifest.items|length == 0 %}disabled{% endif %}>
+                <form action="{{ url_for('dispatch_manifest', id=manifest.id) }}" method="POST" class="mb-0">
+                    <button type="submit" class="btn btn-warning rounded-pill px-4 d-inline-flex align-items-center gap-2 text-dark fw-semibold" {% if manifest.items|length == 0 %}disabled title="Attach at least 1 parcel before dispatch"{% endif %}>
                         <i class="fa-solid fa-paper-plane"></i>
                         <span>Dispatch Manifest</span>
                     </button>
                 </form>
             {% elif manifest.manifest_status == 'Dispatched' %}
-                <form action="{{ url_for('complete_manifest', id=manifest.id) }}" method="POST">
-                    <button type="submit" class="btn btn-success d-inline-flex align-items-center gap-2 fw-semibold">
+                <form action="{{ url_for('complete_manifest', id=manifest.id) }}" method="POST" class="mb-0">
+                    <button type="submit" class="btn btn-success rounded-pill px-4 d-inline-flex align-items-center gap-2 fw-semibold">
                         <i class="fa-solid fa-circle-check"></i>
                         <span>Mark Completed</span>
                     </button>
                 </form>
             {% endif %}
-            <button class="btn btn-outline-dark d-inline-flex align-items-center gap-2" onclick="window.print()">
+            <button class="btn btn-outline-dark rounded-pill px-3 d-inline-flex align-items-center gap-2" onclick="window.print()">
                 <i class="fa-solid fa-print"></i>
                 <span>Print Manifest</span>
             </button>
         </div>
     </div>
 
-    <!-- Overview Cards -->
+    <!-- Overview KPI Cards -->
     <div class="row g-3 mb-4">
         <div class="col-md-3">
-            <div class="card border-0 shadow-sm p-3">
-                <span class="text-muted small">Total Included Parcels</span>
+            <div class="premium-card p-3 mb-0">
+                <span class="text-muted small d-block mb-1"><i class="fa-solid fa-boxes-stacked text-primary me-1"></i>Total Included Parcels</span>
                 <h4 class="fw-bold mb-0 text-primary">{{ manifest.total_parcels }}</h4>
             </div>
         </div>
         <div class="col-md-3">
-            <div class="card border-0 shadow-sm p-3">
-                <span class="text-muted small">Total Batch Weight</span>
+            <div class="premium-card p-3 mb-0">
+                <span class="text-muted small d-block mb-1"><i class="fa-solid fa-weight-hanging text-info me-1"></i>Total Batch Weight</span>
                 <h4 class="fw-bold mb-0 text-info">{{ manifest.total_weight }} kg</h4>
             </div>
         </div>
         <div class="col-md-3">
-            <div class="card border-0 shadow-sm p-3">
-                <span class="text-muted small">Assigned Driver</span>
+            <div class="premium-card p-3 mb-0">
+                <span class="text-muted small d-block mb-1"><i class="fa-solid fa-user-tie text-success me-1"></i>Assigned Driver</span>
                 <h6 class="fw-bold mb-0 text-dark">{{ manifest.assigned_driver.name if manifest.assigned_driver else 'Unassigned' }}</h6>
+                {% if manifest.assigned_driver %}
+                <small class="text-muted">{{ manifest.assigned_driver.phone }}</small>
+                {% endif %}
             </div>
         </div>
         <div class="col-md-3">
-            <div class="card border-0 shadow-sm p-3">
-                <span class="text-muted small">Assigned Vehicle</span>
+            <div class="premium-card p-3 mb-0">
+                <span class="text-muted small d-block mb-1"><i class="fa-solid fa-truck text-warning me-1"></i>Assigned Vehicle</span>
                 <h6 class="fw-bold mb-0 text-dark">{{ manifest.assigned_vehicle.vehicle_code if manifest.assigned_vehicle else 'Unassigned' }}</h6>
+                {% if manifest.assigned_vehicle %}
+                <small class="badge bg-light text-dark border">{{ manifest.assigned_vehicle.license_plate }} ({{ manifest.assigned_vehicle.vehicle_type }})</small>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- LIVE GPS FREIGHT TRACKING SECTION -->
+    <div class="row g-4 mb-4">
+        <div class="col-12 col-lg-8">
+            <div class="premium-card p-0 overflow-hidden mb-0 shadow-sm" style="border-radius: 16px; min-height: 440px;">
+                <div class="premium-card-title p-3 m-0 bg-white border-bottom d-flex justify-content-between align-items-center">
+                    <span class="fw-bold text-dark"><i class="fas fa-satellite-dish me-2 text-primary"></i>Live Group Vehicle Transit Map</span>
+                    <span class="badge bg-primary-subtle text-primary border-0 rounded-pill" id="mapStatusBadge">
+                        {% if manifest.manifest_status == 'Dispatched' %}Live GPS Active{% else %}{{ manifest.manifest_status }}{% endif %}
+                    </span>
+                </div>
+                <div id="manifestMap" style="width: 100%; height: 420px; z-index: 1;"></div>
+            </div>
+        </div>
+
+        <div class="col-12 col-lg-4">
+            <!-- Telemetry Indicator Card -->
+            <div class="premium-card bg-primary text-white border-0 shadow-sm mb-4" style="background: linear-gradient(135deg, var(--primary-color) 0%, #1E40AF 100%) !important; border-radius: 16px;">
+                <h6 class="fw-bold mb-3"><i class="fas fa-gauge-high me-2"></i>Truck Telemetry</h6>
+                <div class="row g-2 text-center mb-3">
+                    <div class="col-4 border-end border-white border-opacity-10">
+                        <span class="d-block text-white-50" style="font-size: 0.7rem;">ETA</span>
+                        <strong id="mnf_eta" style="font-size: 1.1rem;">-- Mins</strong>
+                    </div>
+                    <div class="col-4 border-end border-white border-opacity-10">
+                        <span class="d-block text-white-50" style="font-size: 0.7rem;">Distance</span>
+                        <strong id="mnf_distance" style="font-size: 1.1rem;">-- Km</strong>
+                    </div>
+                    <div class="col-4">
+                        <span class="d-block text-white-50" style="font-size: 0.7rem;">Speed</span>
+                        <strong id="mnf_speed" style="font-size: 1.1rem;">-- km/h</strong>
+                    </div>
+                </div>
+
+                <div class="progress bg-white bg-opacity-20 mb-2" style="height: 6px; border-radius: 10px;">
+                    <div class="progress-bar bg-white" id="mnf_progress_fill" style="width: {% if manifest.manifest_status == 'Completed' %}100%{% elif manifest.manifest_status == 'Dispatched' %}50%{% else %}0%{% endif %};"></div>
+                </div>
+                <div class="d-flex justify-content-between align-items-center" style="font-size: 0.75rem;">
+                    <span id="mnf_progress_text">{% if manifest.manifest_status == 'Completed' %}100% Reached{% elif manifest.manifest_status == 'Dispatched' %}In Transit{% else %}Queued at Origin{% endif %}</span>
+                    <span class="fw-bold text-uppercase">{{ manifest.manifest_status }}</span>
+                </div>
+            </div>
+
+            <!-- Transit Node Info Card -->
+            <div class="premium-card mb-0 shadow-sm" style="border-radius: 16px;">
+                <h6 class="fw-bold text-dark mb-3"><i class="fas fa-network-wired text-primary me-2"></i>Transit Terminals</h6>
+                
+                <div class="d-flex align-items-start gap-3 mb-3">
+                    <div class="bg-primary text-white rounded-circle p-2 d-flex align-items-center justify-content-center" style="width: 32px; height: 32px; font-size: 0.8rem;">
+                        <i class="fas fa-warehouse"></i>
+                    </div>
+                    <div>
+                        <span class="text-muted small d-block">Origin Dispatch Hub</span>
+                        <strong class="text-dark">{{ manifest.origin_hub.name if manifest.origin_hub else 'N/A' }} Hub</strong>
+                        <small class="text-muted d-block">{{ manifest.origin_hub.latitude }}, {{ manifest.origin_hub.longitude }}</small>
+                    </div>
+                </div>
+
+                <div class="d-flex align-items-start gap-3 mb-3">
+                    <div class="bg-success text-white rounded-circle p-2 d-flex align-items-center justify-content-center" style="width: 32px; height: 32px; font-size: 0.8rem;">
+                        <i class="fas fa-warehouse"></i>
+                    </div>
+                    <div>
+                        <span class="text-muted small d-block">Destination Receiving Hub</span>
+                        <strong class="text-dark">{{ manifest.destination_hub.name if manifest.destination_hub else 'N/A' }} Hub</strong>
+                        <small class="text-muted d-block">{{ manifest.destination_hub.latitude }}, {{ manifest.destination_hub.longitude }}</small>
+                    </div>
+                </div>
+
+                <div class="border-top pt-2 mt-2">
+                    <small class="text-muted">Transport Mode: <strong>Freight Carrier ({{ manifest.assigned_vehicle.vehicle_type if manifest.assigned_vehicle else 'Heavy Transit Vehicle' }})</strong></small>
+                </div>
             </div>
         </div>
     </div>
 
     <!-- Attached Parcels List -->
-    <div class="card border-0 shadow-sm">
-        <div class="card-header bg-white py-3 border-0">
-            <h5 class="fw-bold mb-0">Attached Parcels List</h5>
+    <div class="premium-card p-0 overflow-hidden shadow-sm" style="border-radius: 16px;">
+        <div class="p-3 bg-white border-bottom d-flex justify-content-between align-items-center">
+            <h5 class="fw-bold mb-0 text-dark"><i class="fa-solid fa-boxes-packing text-primary me-2"></i>Batched Shipments in this Manifest ({{ manifest.items|length }})</h5>
+            {% if manifest.manifest_status in ['Draft', 'Created'] %}
+            <button class="btn btn-sm btn-primary rounded-pill px-3" data-bs-toggle="modal" data-bs-target="#addParcelModal">
+                <i class="fa-solid fa-plus me-1"></i>Attach More Parcels
+            </button>
+            {% endif %}
         </div>
-        <div class="card-body p-0">
-            <div class="table-responsive">
-                <table class="table table-hover align-middle mb-0">
-                    <thead class="table-light">
-                        <tr>
-                            <th>Tracking ID</th>
-                            <th>Sender</th>
-                            <th>Receiver</th>
-                            <th>Type</th>
-                            <th>Weight</th>
-                            <th>Status</th>
-                            {% if manifest.manifest_status in ['Draft', 'Created'] %}
-                            <th class="text-end">Actions</th>
-                            {% endif %}
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for item in manifest.items %}
-                        <tr>
-                            <td><strong class="text-primary">{{ item.parcel.tracking_id }}</strong></td>
-                            <td>{{ item.parcel.sender_name }} ({{ item.parcel.sender_phone }})</td>
-                            <td>{{ item.parcel.receiver_name }} ({{ item.parcel.receiver_phone }})</td>
-                            <td><span class="badge bg-light text-dark border">{{ item.parcel.parcel_type }}</span></td>
-                            <td>{{ item.parcel.weight }} kg</td>
-                            <td><span class="badge bg-info bg-opacity-10 text-info border border-info">{{ item.parcel.status }}</span></td>
-                            {% if manifest.manifest_status in ['Draft', 'Created'] %}
-                            <td class="text-end">
-                                <form action="{{ url_for('remove_parcel_from_manifest', id=manifest.id, item_id=item.id) }}" method="POST" class="d-inline">
-                                    <button type="submit" class="btn btn-sm btn-outline-danger"><i class="fa-solid fa-trash me-1"></i>Remove</button>
-                                </form>
-                            </td>
-                            {% endif %}
-                        </tr>
-                        {% else %}
-                        <tr>
-                            <td colspan="7" class="text-center py-4 text-muted">No parcels attached to this manifest batch yet.</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
+        <div class="table-responsive">
+            <table class="table premium-table align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>Tracking ID</th>
+                        <th>Sender</th>
+                        <th>Receiver & Address</th>
+                        <th>Type</th>
+                        <th>Weight</th>
+                        <th>Status</th>
+                        {% if manifest.manifest_status in ['Draft', 'Created'] %}
+                        <th class="text-end">Actions</th>
+                        {% endif %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in manifest.items %}
+                    <tr>
+                        <td>
+                            <a href="{{ url_for('parcel_details', id=item.parcel.id) }}" class="fw-bold text-primary text-decoration-none">{{ item.parcel.tracking_id }}</a>
+                        </td>
+                        <td>{{ item.parcel.sender_name }}<br><small class="text-muted">{{ item.parcel.sender_phone }}</small></td>
+                        <td>{{ item.parcel.receiver_name }}<br><small class="text-muted">{{ item.parcel.delivery_address }}</small></td>
+                        <td><span class="badge bg-light text-dark border">{{ item.parcel.parcel_type }}</span></td>
+                        <td><strong>{{ item.parcel.weight }} kg</strong></td>
+                        <td>
+                            <span class="status-badge {% if item.parcel.status == 'Pending' %}badge-pending{% elif item.parcel.status == 'Assigned' %}badge-assigned{% elif item.parcel.status == 'In Transit' %}badge-intransit{% elif item.parcel.status == 'Delivered' %}badge-delivered{% else %}badge-manifested{% endif %}" style="font-size: 0.65rem;">
+                                {{ item.parcel.status }}
+                            </span>
+                        </td>
+                        {% if manifest.manifest_status in ['Draft', 'Created'] %}
+                        <td class="text-end">
+                            <form action="{{ url_for('remove_parcel_from_manifest', id=manifest.id, item_id=item.id) }}" method="POST" class="d-inline">
+                                <button type="submit" class="btn btn-sm btn-outline-danger border-0 rounded-circle" title="Remove from batch"><i class="fa-solid fa-trash"></i></button>
+                            </form>
+                        </td>
+                        {% endif %}
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="7" class="text-center py-4 text-muted">No parcels attached to this manifest batch yet. Click <strong>Attach Parcel</strong> to bundle packages.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
         </div>
     </div>
 </div>
@@ -125,26 +220,26 @@
 {% if manifest.manifest_status in ['Draft', 'Created'] %}
 <div class="modal fade" id="addParcelModal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content border-0 shadow">
+        <div class="modal-content border-0 shadow-lg" style="border-radius: 16px;">
             <form action="{{ url_for('add_parcel_to_manifest', id=manifest.id) }}" method="POST">
-                <div class="modal-header">
-                    <h5 class="modal-header-title fw-bold">Attach Parcel to Manifest</h5>
+                <div class="modal-header border-bottom p-3">
+                    <h5 class="modal-title fw-bold text-dark"><i class="fa-solid fa-box text-primary me-2"></i>Attach Parcel to Manifest</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body p-4">
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Select Available Pending Parcel</label>
                         <select name="parcel_id" class="form-select" required>
-                            <option value="">-- Select Parcel --</option>
+                            <option value="">-- Choose Parcel to Group --</option>
                             {% for p in pending_parcels %}
-                                <option value="{{ p.id }}">{{ p.tracking_id }} - {{ p.sender_name }} to {{ p.receiver_name }} ({{ p.weight }}kg)</option>
+                                <option value="{{ p.id }}">{{ p.tracking_id }} - {{ p.sender_name }} &rarr; {{ p.receiver_name }} ({{ p.weight }}kg, {{ p.pickup_hub }} to {{ p.delivery_hub }})</option>
                             {% endfor %}
                         </select>
                     </div>
                 </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Attach to Manifest</button>
+                <div class="modal-footer border-top p-3">
+                    <button type="button" class="btn btn-light rounded-pill px-3" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary rounded-pill px-4">Attach to Manifest</button>
                 </div>
             </form>
         </div>
@@ -152,3 +247,104 @@
 </div>
 {% endif %}
 {% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const manifestId = {{ manifest.id }};
+    const mapElement = document.getElementById('manifestMap');
+    if (!mapElement) return;
+
+    // Initialize Leaflet Map
+    const map = L.map('manifestMap').setView([27.7172, 85.3240], 12);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+
+    function createCustomIcon(iconClass, bgClass) {
+        return L.divIcon({
+            className: 'custom-leaflet-icon',
+            html: `<div class="pulse-marker-icon ${bgClass}" style="width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; box-shadow: 0 4px 6px rgba(0,0,0,0.2);">
+                    <i class="${iconClass}" style="font-size: 14px;"></i>
+                   </div>`,
+            iconSize: [32, 32],
+            iconAnchor: [16, 16]
+        });
+    }
+
+    const originIcon = createCustomIcon('fas fa-warehouse', 'bg-primary');
+    const destIcon = createCustomIcon('fas fa-warehouse', 'bg-success');
+    const truckIcon = createCustomIcon('fas fa-truck', 'bg-warning text-dark');
+
+    let driverMarker = null;
+
+    // Fetch and Draw Route
+    fetch(`/api/manifest/${manifestId}/route`)
+        .then(res => res.json())
+        .then(data => {
+            if (data.error) return;
+
+            const origin = data.origin;
+            const dest = data.destination;
+
+            L.marker([origin.lat, origin.lng], { icon: originIcon }).addTo(map).bindPopup(`<strong>Origin:</strong> ${origin.name}`);
+            L.marker([dest.lat, dest.lng], { icon: destIcon }).addTo(map).bindPopup(`<strong>Destination:</strong> ${dest.name}`);
+
+            if (data.driver && data.driver.lat && data.driver.lng) {
+                driverMarker = L.marker([data.driver.lat, data.driver.lng], { icon: truckIcon }).addTo(map)
+                    .bindPopup(`<strong>Courier:</strong> ${data.driver.name}<br><strong>Vehicle:</strong> ${data.driver.vehicle} (${data.driver.vehicle_plate})`);
+            }
+
+            let bounds = [];
+            if (data.segments && data.segments.length > 0) {
+                data.segments.forEach(seg => {
+                    if (seg.coordinates && seg.coordinates.length > 0) {
+                        const pts = seg.coordinates.map(pt => [pt.lat, pt.lng]);
+                        bounds.push(...pts);
+
+                        // Casing
+                        L.polyline(pts, { color: '#1E293B', weight: 8, opacity: 0.9, lineCap: 'round', lineJoin: 'round' }).addTo(map);
+                        // Fill
+                        L.polyline(pts, { color: '#2563EB', weight: 4, opacity: 1.0, lineCap: 'round', lineJoin: 'round' }).addTo(map);
+                    }
+                });
+            } else if (data.path && data.path.length > 0) {
+                const pts = data.path.map(pt => [pt.lat, pt.lng]);
+                bounds.push(...pts);
+                L.polyline(pts, { color: '#2563EB', weight: 4 }).addTo(map);
+            }
+
+            if (bounds.length > 0) {
+                map.fitBounds(L.latLngBounds(bounds), { padding: [40, 40] });
+            }
+        })
+        .catch(err => console.error("Error loading manifest route: ", err));
+
+    // Telemetry Polling Function
+    function pollTelemetry() {
+        fetch(`/api/manifest/${manifestId}/telemetry`)
+            .then(res => res.json())
+            .then(tel => {
+                if (tel.driver_latitude && tel.driver_longitude) {
+                    if (driverMarker) {
+                        driverMarker.setLatLng([tel.driver_latitude, tel.driver_longitude]);
+                    } else {
+                        driverMarker = L.marker([tel.driver_latitude, tel.driver_longitude], { icon: truckIcon }).addTo(map);
+                    }
+                }
+
+                document.getElementById('mnf_eta').textContent = tel.eta_minutes + ' Mins';
+                document.getElementById('mnf_distance').textContent = tel.distance_remaining_km + ' Km';
+                document.getElementById('mnf_speed').textContent = tel.speed_kmh + ' km/h';
+                document.getElementById('mnf_progress_fill').style.width = tel.progress_percent + '%';
+                document.getElementById('mnf_progress_text').textContent = tel.progress_percent + '% Completed';
+            })
+            .catch(err => console.error("Telemetry error: ", err));
+    }
+
+    pollTelemetry();
+    setInterval(pollTelemetry, 10000);
+});
+</script>
+{% endblock %}
+

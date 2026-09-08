@@ -10,10 +10,16 @@
             <h3 class="fw-bold mb-1">Driver & Vehicle Dispatch Assignments</h3>
             <p class="text-muted mb-0">Assign available drivers and vehicles to active manifests or deliveries.</p>
         </div>
-        <button class="btn btn-primary d-inline-flex align-items-center gap-2" data-bs-toggle="modal" data-bs-target="#createAssignmentModal">
-            <i class="fa-solid fa-link"></i>
-            <span>Create New Assignment</span>
-        </button>
+        <div class="d-flex gap-2">
+            <a href="{{ url_for('delivery_optimization') }}" class="btn btn-outline-primary d-inline-flex align-items-center gap-2">
+                <i class="fa-solid fa-route"></i>
+                <span>Multi-Courier Optimization</span>
+            </a>
+            <button class="btn btn-primary d-inline-flex align-items-center gap-2" data-bs-toggle="modal" data-bs-target="#createAssignmentModal">
+                <i class="fa-solid fa-link"></i>
+                <span>Create New Assignment</span>
+            </button>
+        </div>
     </div>
 
     <!-- Active Assignments Table -->

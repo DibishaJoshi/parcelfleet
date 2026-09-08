@@ -1,5 +1,60 @@
+/**
+ * ParcelFleet - Driver Panel Controller
+ * Handles digital signature verification, photo uploads, high-accuracy live GPS telemetry broadcasting,
+ * interactive Leaflet road routing, TSP stop pins, HUD overlay updates, and transit simulation.
+ */
+
+// Global helper for modal workflow stage changes
+window.toggleWorkflowSections = function (selectEl) {
+    const pId = selectEl.getAttribute('data-parcel-id');
+    const status = selectEl.value;
+    
+    const pickupSec = document.getElementById('pickup_section' + pId);
+    const deliveredSec = document.getElementById('delivered_section' + pId);
+    const failedSec = document.getElementById('failed_section' + pId);
+
+    if (pickupSec) pickupSec.classList.add('d-none');
+    if (deliveredSec) deliveredSec.classList.add('d-none');
+    if (failedSec) failedSec.classList.add('d-none');
+
+    const pickupFile = document.getElementById('pickup_file' + pId);
+    const deliveryFile = document.getElementById('delivery_file' + pId);
+    const failedReason = document.getElementById('failedReason' + pId);
+
+    if (pickupFile) pickupFile.removeAttribute('required');
+    if (deliveryFile) deliveryFile.removeAttribute('required');
+    if (failedReason) failedReason.removeAttribute('required');
+
+    if (status === 'Picked Up') {
+        if (pickupSec) pickupSec.classList.remove('d-none');
+        if (pickupFile) pickupFile.setAttribute('required', 'required');
+    } else if (status === 'Delivered') {
+        if (deliveredSec) deliveredSec.classList.remove('d-none');
+        if (deliveryFile) deliveryFile.setAttribute('required', 'required');
+        
+        setTimeout(() => {
+            const canvas = document.getElementById('signatureCanvas');
+            if (canvas) {
+                const rect = canvas.getBoundingClientRect();
+                canvas.width = rect.width;
+                canvas.height = rect.height;
+                const ctx = canvas.getContext('2d');
+                ctx.strokeStyle = '#0F172A';
+                ctx.lineWidth = 3;
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+            }
+        }, 150);
+    } else if (status === 'Failed Attempt') {
+        if (failedSec) failedSec.classList.remove('d-none');
+        if (failedReason) failedReason.setAttribute('required', 'required');
+    }
+};
+
 document.addEventListener('DOMContentLoaded', function () {
+    // -------------------------------------------------------------
     // 1. DIGITAL CANVAS SIGNATURE PAD HANDLER
+    // -------------------------------------------------------------
     const canvas = document.getElementById('signatureCanvas');
     const signatureInput = document.getElementById('customer_signature_data');
     const clearBtn = document.getElementById('clearSignature');
@@ -10,26 +65,23 @@ document.addEventListener('DOMContentLoaded', function () {
         let lastX = 0;
         let lastY = 0;
 
-        // Size canvas dynamically to fit border wrapper
         const resizeCanvas = () => {
             const rect = canvas.getBoundingClientRect();
-            canvas.width = rect.width;
-            canvas.height = rect.height;
-            
-            // Set canvas stroke styles
-            ctx.strokeStyle = '#0F172A'; // Charcoal color
-            ctx.lineWidth = 3;
-            ctx.lineCap = 'round';
-            ctx.lineJoin = 'round';
+            if (rect.width > 0 && rect.height > 0) {
+                canvas.width = rect.width;
+                canvas.height = rect.height;
+                ctx.strokeStyle = '#0F172A';
+                ctx.lineWidth = 3;
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+            }
         };
 
         window.addEventListener('resize', resizeCanvas);
-        // Wait a small delay to make sure UI is rendered
-        setTimeout(resizeCanvas, 200);
+        setTimeout(resizeCanvas, 250);
 
         const getCoordinates = (e) => {
             const rect = canvas.getBoundingClientRect();
-            // Support both touch and mouse coords
             if (e.touches && e.touches.length > 0) {
                 return {
                     x: e.touches[0].clientX - rect.left,
@@ -51,18 +103,14 @@ document.addEventListener('DOMContentLoaded', function () {
 
         const draw = (e) => {
             if (!isDrawing) return;
-            e.preventDefault(); // Prevent scrolling on mobile touch
-            
+            e.preventDefault();
             const coords = getCoordinates(e);
             ctx.beginPath();
             ctx.moveTo(lastX, lastY);
             ctx.lineTo(coords.x, coords.y);
             ctx.stroke();
-            
             lastX = coords.x;
             lastY = coords.y;
-            
-            // Write to base64 input
             signatureInput.value = canvas.toDataURL();
         };
 
@@ -70,18 +118,15 @@ document.addEventListener('DOMContentLoaded', function () {
             isDrawing = false;
         };
 
-        // Mouse Events
         canvas.addEventListener('mousedown', startDrawing);
         canvas.addEventListener('mousemove', draw);
         canvas.addEventListener('mouseup', stopDrawing);
         canvas.addEventListener('mouseout', stopDrawing);
 
-        // Touch Events (Mobile/Tablet Support)
-        canvas.addEventListener('touchstart', startDrawing);
-        canvas.addEventListener('touchmove', draw);
+        canvas.addEventListener('touchstart', startDrawing, { passive: false });
+        canvas.addEventListener('touchmove', draw, { passive: false });
         canvas.addEventListener('touchend', stopDrawing);
 
-        // Clear Canvas
         if (clearBtn) {
             clearBtn.addEventListener('click', (e) => {
                 e.preventDefault();
@@ -91,13 +136,14 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
-    // 2. FILE UPLOADS PREVIEW TRIGGER
+    // -------------------------------------------------------------
+    // 2. PHOTO UPLOADS PREVIEW TRIGGER
+    // -------------------------------------------------------------
     const fileInputs = document.querySelectorAll('.parcel-photo-input');
     fileInputs.forEach(input => {
         input.addEventListener('change', function () {
             const previewId = this.getAttribute('data-preview');
             const previewEl = document.getElementById(previewId);
-            
             if (previewEl && this.files && this.files[0]) {
                 const reader = new FileReader();
                 reader.onload = function (e) {
@@ -109,206 +155,38 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     });
 
-    // 3. SIMULATED GPS GPS-TELEMETRY TICKER LOOP
+    // -------------------------------------------------------------
+    // 3. LIVE NAVIGATION MAP & ROUTING CONTROLLER
+    // -------------------------------------------------------------
+    const mapContainer = document.getElementById('driverLiveMap');
     const shareLocationToggle = document.getElementById('shareLocationToggle');
-    let sharingInterval = null;
+    const simulateToggle = document.getElementById('simulateMovementToggle');
+    const driverStateSelect = document.getElementById('driverStateSelect');
+    const gpsStatusBadge = document.getElementById('gpsStatusBadge');
+    const btnRecenterGps = document.getElementById('btnRecenterGps');
+
+    const hudTargetText = document.getElementById('hudTargetText');
+    const hudDistanceText = document.getElementById('hudDistanceText');
+    const hudEtaText = document.getElementById('hudEtaText');
+
+    let driverMap = null;
+    let driverMarker = null;
+    let routeLayer = null;
+    let stopsLayer = null;
+    
+    let currentDriverLat = mapContainer && mapContainer.getAttribute('data-driver-lat') ? parseFloat(mapContainer.getAttribute('data-driver-lat')) : 27.6850;
+    let currentDriverLng = mapContainer && mapContainer.getAttribute('data-driver-lng') ? parseFloat(mapContainer.getAttribute('data-driver-lng')) : 85.2050;
+    let driverVehicleType = 'Bike';
     let pathCoordinates = [];
     let pathIndex = 0;
+    let watchPositionId = null;
+    let simulationTimer = null;
+    let routeFetchInterval = null;
 
-    if (shareLocationToggle) {
-        const driverId = shareLocationToggle.getAttribute('data-driver-id');
-        
-        const fetchActiveRoute = () => {
-            // Fetch route coordinates for the current active/In Transit parcel assigned to the driver
-            return fetch('/api/driver/active-route')
-                .then(res => res.json())
-                .then(data => {
-                    if (data && data.coordinates && data.coordinates.length > 0) {
-                        pathCoordinates = data.coordinates;
-                        pathIndex = 0;
-                        console.log('Driver Route Coordinates loaded successfully: ', pathCoordinates);
-                    } else {
-                        pathCoordinates = [];
-                        console.log('No active in-transit parcel route found. Will broadcast current base coordinate.');
-                    }
-                });
-        };
-
-        const sendLocationUpdate = (lat, lng, availabilityState) => {
-            const payload = { availability: availabilityState };
-            if (lat !== null && lng !== null && lat !== undefined && lng !== undefined) {
-                payload.latitude = lat;
-                payload.longitude = lng;
-            }
-
-            fetch('/api/driver/location', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            })
-            .then(res => res.json())
-            .then(data => {
-                console.log('Live Telemetry Logged: ', data);
-                
-                // Show a toast message if coordinates are updated
-                const toastContainer = document.getElementById('toast-container');
-                if (toastContainer && lat !== null && lng !== null && lat !== undefined && lng !== undefined) {
-                    showToast('Telemetry Synchronized', 'Simulated GPS Broadcasted: ' + lat.toFixed(5) + ', ' + lng.toFixed(5), 'info');
-                }
-            })
-            .catch(err => console.error('GPS broadcast error: ', err));
-        };
-
-        const tickLocationSimulation = () => {
-            const stateSelect = document.getElementById('driverStateSelect');
-            const selectedState = stateSelect ? stateSelect.value : 'Available';
-            const state = pathCoordinates.length > 0 ? 'On Delivery' : selectedState;
-
-            // Attempt to get the device's REAL coordinates first (High Accuracy)
-            if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(
-                    (position) => {
-                        const realLat = position.coords.latitude;
-                        const realLng = position.coords.longitude;
-                        
-                        // Allow any valid device coordinates to support testing/usage anywhere
-                        if (realLat && realLng && Math.abs(realLat) <= 90 && Math.abs(realLng) <= 180) {
-                            console.log('Real Device Location Captured: ', realLat, realLng);
-                            sendLocationUpdate(realLat, realLng, state);
-                        } else {
-                            console.warn('Invalid GPS coordinates received. Automatically falling back to routing simulation.');
-                            runSimulationFallback(state);
-                        }
-                    },
-                    (error) => {
-                        console.warn('Real GPS access denied/error. Falling back to simulation: ', error.message);
-                        runSimulationFallback(state);
-                    },
-                    { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
-                );
-            }
- else {
-                console.warn('Geolocation API not supported. Falling back to simulation.');
-                runSimulationFallback(state);
-            }
-        };
-
-        const runSimulationFallback = (state) => {
-            const simulateToggle = document.getElementById('simulateMovementToggle');
-            const isSimulating = simulateToggle ? simulateToggle.checked : false;
-
-            if (pathCoordinates.length > 0) {
-                // Traversal along Dijkstra path simulation
-                const currentCoord = pathCoordinates[pathIndex];
-                sendLocationUpdate(currentCoord.lat, currentCoord.lng, state);
-                
-                if (isSimulating) {
-                    // Move to next node in path
-                    pathIndex = (pathIndex + 1) % pathCoordinates.length;
-                }
-            } else {
-                // Keep current database coordinates (do not force reset to Thamel)
-                sendLocationUpdate(null, null, state);
-            }
-        };
-
-        const startSharing = () => {
-            console.log('Live location telemetry broadcast enabled.');
-            localStorage.setItem('shareLocation_' + driverId, 'true');
-            fetchActiveRoute().then(() => {
-                tickLocationSimulation(); // Run first tick instantly
-                if (sharingInterval) clearInterval(sharingInterval);
-                sharingInterval = setInterval(tickLocationSimulation, 10000);
-            });
-        };
-
-        const stopSharing = () => {
-            console.log('Live location telemetry broadcast disabled.');
-            localStorage.setItem('shareLocation_' + driverId, 'false');
-            if (sharingInterval) {
-                clearInterval(sharingInterval);
-                sharingInterval = null;
-            }
-            
-            const stateSelect = document.getElementById('driverStateSelect');
-            const selectedState = stateSelect ? stateSelect.value : 'Offline';
-            sendLocationUpdate(null, null, selectedState);
-        };
-
-        shareLocationToggle.addEventListener('change', function () {
-            if (this.checked) {
-                startSharing();
-            } else {
-                alert("Location sharing is turned off. Live location is required for active deliveries. Please enable location sharing.");
-                stopSharing();
-            }
-        });
-
-        // Dropdown state select change listener
-        const stateSelect = document.getElementById('driverStateSelect');
-        if (stateSelect) {
-            stateSelect.addEventListener('change', function () {
-                if (!shareLocationToggle.checked) {
-                    sendLocationUpdate(null, null, this.value);
-                }
-            });
-        }
-
-        // Restore toggled state from localStorage
-        const storedShareState = localStorage.getItem('shareLocation_' + driverId);
-        if (storedShareState === 'true') {
-            shareLocationToggle.checked = true;
-            startSharing();
-        } else {
-            shareLocationToggle.checked = false;
-            // Ask to allow location if currently disabled on load
-            setTimeout(() => {
-                const allow = confirm("Location sharing is currently disabled. Would you like to enable live GPS location sharing to allow customers and administrators to track your active deliveries?");
-                if (allow) {
-                    shareLocationToggle.checked = true;
-                    startSharing();
-                }
-            }, 1500);
-        }
-
-        // Restore simulate toggle state from localStorage
-        const simulateToggle = document.getElementById('simulateMovementToggle');
-        if (simulateToggle) {
-            const storedSimulateState = localStorage.getItem('simulateLocation_' + driverId);
-            if (storedSimulateState === 'true') {
-                simulateToggle.checked = true;
-            } else {
-                simulateToggle.checked = false;
-            }
-            
-            simulateToggle.addEventListener('change', function () {
-                localStorage.setItem('simulateLocation_' + driverId, this.checked ? 'true' : 'false');
-                console.log('Simulate active transit state changed to: ', this.checked);
-            });
-        }
-
-        // Automatic GPS sync check on startup (only if location sharing is active)
-        if (shareLocationToggle.checked && navigator.geolocation) {
-            navigator.geolocation.getCurrentPosition(
-                (position) => {
-                    const startupLat = position.coords.latitude;
-                    const startupLng = position.coords.longitude;
-                    const stateSelect = document.getElementById('driverStateSelect');
-                    const selectedState = stateSelect ? stateSelect.value : 'Available';
-                    console.log('Initial startup GPS coordinates registered: ', startupLat, startupLng);
-                    sendLocationUpdate(startupLat, startupLng, selectedState);
-                },
-                (err) => console.log('Initial startup GPS access skipped: ', err.message),
-                { enableHighAccuracy: true, timeout: 5000 }
-            );
-        }
-    }
-
-    // Helper functions for showing alerts
+    // Toast notification helper
     function showToast(title, message, type = 'info') {
         const toastContainer = document.getElementById('toast-container');
         if (!toastContainer) return;
-
         const toast = document.createElement('div');
         toast.className = `toast show align-items-center text-white bg-${type === 'info' ? 'primary' : type} border-0 m-2`;
         toast.role = 'alert';
@@ -321,10 +199,402 @@ document.addEventListener('DOMContentLoaded', function () {
             </div>
         `;
         toastContainer.appendChild(toast);
-        
         setTimeout(() => {
             toast.classList.remove('show');
-            setTimeout(() => toast.remove(), 500);
-        }, 5000);
+            setTimeout(() => toast.remove(), 400);
+        }, 4000);
     }
+
+    // Initialize Leaflet Map
+    function initDriverMap() {
+        if (!mapContainer || typeof L === 'undefined') return;
+
+        driverMap = L.map('driverLiveMap', {
+            zoomControl: true,
+            attributionControl: false
+        }).setView([currentDriverLat, currentDriverLng], 14);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19
+        }).addTo(driverMap);
+
+        routeLayer = L.layerGroup().addTo(driverMap);
+        stopsLayer = L.layerGroup().addTo(driverMap);
+
+        // Custom pulsing marker icon
+        const driverIcon = L.divIcon({
+            className: 'custom-driver-icon',
+            html: `
+                <div class="driver-live-marker-wrap">
+                    <div class="driver-live-pulse"></div>
+                    <div class="driver-live-core">
+                        <i class="fas fa-motorcycle"></i>
+                    </div>
+                </div>
+            `,
+            iconSize: [36, 36],
+            iconAnchor: [18, 18],
+            popupAnchor: [0, -18]
+        });
+
+        driverMarker = L.marker([currentDriverLat, currentDriverLng], {
+            icon: driverIcon,
+            zIndexOffset: 1000
+        }).addTo(driverMap);
+        
+        driverMarker.bindPopup('<strong>My Live Location</strong><br>GPS Telemetry Broadcasting');
+
+        // Recenter button click
+        if (btnRecenterGps) {
+            btnRecenterGps.addEventListener('click', () => {
+                if (driverMap && currentDriverLat && currentDriverLng) {
+                    driverMap.setView([currentDriverLat, currentDriverLng], 15, { animate: true });
+                }
+            });
+        }
+    }
+
+    // Update the visual position of the driver marker on the map
+    function updateDriverMarker(lat, lng) {
+        currentDriverLat = lat;
+        currentDriverLng = lng;
+        if (driverMarker) {
+            driverMarker.setLatLng([lat, lng]);
+        }
+    }
+
+    // Send location to server
+    function sendLocationUpdate(lat, lng, availabilityState) {
+        const payload = {
+            availability: availabilityState || (driverStateSelect ? driverStateSelect.value : 'Available')
+        };
+        if (lat !== null && lng !== null && lat !== undefined && lng !== undefined) {
+            payload.latitude = lat;
+            payload.longitude = lng;
+        }
+
+        return fetch('/api/driver/update-location', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        })
+        .then(res => res.json())
+        .then(data => {
+            console.log('Driver location update committed: ', data);
+            return data;
+        })
+        .catch(err => console.error('GPS broadcast error: ', err));
+    }
+
+    // Fetch active road route & TSP stops from server
+    function fetchAndRenderActiveRoute() {
+        return fetch('/api/driver/active-route')
+            .then(res => res.json())
+            .then(data => {
+                if (!data || !driverMap) return;
+
+                if (data.driver) {
+                    driverVehicleType = data.driver.vehicle_type || 'Bike';
+                    // Update vehicle icon in marker if needed
+                    const iconEl = document.querySelector('.driver-live-core i');
+                    if (iconEl) {
+                        if (driverVehicleType.toLowerCase().includes('truck')) {
+                            iconEl.className = 'fas fa-truck';
+                        } else if (driverVehicleType.toLowerCase().includes('van')) {
+                            iconEl.className = 'fas fa-van-shuttle';
+                        } else {
+                            iconEl.className = 'fas fa-motorcycle';
+                        }
+                    }
+                }
+
+                // Clear previous route polylines and stop markers
+                if (routeLayer) routeLayer.clearLayers();
+                if (stopsLayer) stopsLayer.clearLayers();
+
+                // 1. Render road polyline if coordinates exist
+                if (data.coordinates && data.coordinates.length > 0) {
+                    pathCoordinates = data.coordinates;
+                    const latlngs = data.coordinates.map(pt => [pt.lat, pt.lng]);
+                    
+                    // Route casing shadow
+                    L.polyline(latlngs, {
+                        color: '#1E3A8A',
+                        weight: 7,
+                        opacity: 0.6,
+                        lineCap: 'round',
+                        lineJoin: 'round'
+                    }).addTo(routeLayer);
+
+                    // Route primary line
+                    const primaryLine = L.polyline(latlngs, {
+                        color: '#3B82F6',
+                        weight: 4,
+                        opacity: 0.95,
+                        lineCap: 'round',
+                        lineJoin: 'round'
+                    }).addTo(routeLayer);
+
+                    // Fit map bounds to view driver and route
+                    const bounds = primaryLine.getBounds();
+                    if (bounds.isValid()) {
+                        driverMap.fitBounds(bounds, { padding: [40, 40], maxZoom: 16 });
+                    }
+                } else {
+                    pathCoordinates = [];
+                }
+
+                // 2. Render TSP-ordered Stop Pins
+                if (data.stops && data.stops.length > 0) {
+                    data.stops.forEach((stop, index) => {
+                        const stopNum = stop.stop_number || (index + 1);
+                        const isDelivery = (stop.action_type || '').includes('Deliver') || stop.status !== 'Assigned';
+                        const badgeClass = isDelivery ? 'stop-delivery' : 'stop-pickup';
+                        const actionLabel = stop.action_type || (isDelivery ? 'Delivery' : 'Pickup');
+
+                        const stopIcon = L.divIcon({
+                            className: 'custom-stop-icon',
+                            html: `<div class="stop-numbered-marker ${badgeClass}">${stopNum}</div>`,
+                            iconSize: [28, 28],
+                            iconAnchor: [14, 14],
+                            popupAnchor: [0, -14]
+                        });
+
+                        const recipientInfo = stop.receiver_name ? `<strong>Recipient:</strong> ${stop.receiver_name} (${stop.receiver_phone || 'N/A'})<br>` : '';
+                        const senderInfo = stop.sender_name ? `<strong>Sender:</strong> ${stop.sender_name} (${stop.sender_phone || 'N/A'})<br>` : '';
+                        const chargeInfo = stop.delivery_charge ? `<strong>Charge:</strong> Rs. ${stop.delivery_charge} (${stop.payment_status || 'Unpaid'})<br>` : '';
+
+                        const popupHtml = `
+                            <div style="font-size: 0.85rem; min-width: 180px;">
+                                <div class="badge bg-primary mb-1">Stop #${stopNum} &bull; ${actionLabel}</div>
+                                <h6 class="fw-bold mb-1 text-dark">${stop.tracking_id || stop.name || 'Destination'}</h6>
+                                <p class="text-muted small mb-1"><i class="fas fa-location-dot me-1 text-danger"></i>${stop.delivery_address || stop.name || ''}</p>
+                                ${recipientInfo}
+                                ${senderInfo}
+                                ${chargeInfo}
+                            </div>
+                        `;
+
+                        L.marker([stop.lat, stop.lng], { icon: stopIcon })
+                            .bindPopup(popupHtml)
+                            .addTo(stopsLayer);
+                    });
+                }
+
+                // 3. Update HUD Metrics
+                if (hudTargetText && hudDistanceText && hudEtaText) {
+                    if (data.type === 'manifest') {
+                        hudTargetText.innerHTML = `<i class="fas fa-truck-moving me-1"></i>Freight Manifest: ${data.destination.name}`;
+                        hudDistanceText.innerText = `${Number(data.distance_km || 0).toFixed(1)} km`;
+                        hudEtaText.innerText = `${Math.round(data.duration_min || 0)} mins`;
+                    } else if (data.type === 'parcels' && data.current_target) {
+                        const target = data.current_target;
+                        const action = target.action_type || 'Deliver to';
+                        const recipient = target.receiver_name ? ` (${target.receiver_name})` : '';
+                        hudTargetText.innerHTML = `<i class="fas fa-box me-1"></i>Stop #1: ${action}${recipient} &bull; ${target.delivery_address || ''}`;
+                        hudDistanceText.innerText = `${Number(data.distance_km || 0).toFixed(1)} km`;
+                        hudEtaText.innerText = `${Math.round(data.duration_min || 0)} mins`;
+                    } else {
+                        hudTargetText.innerHTML = `<i class="fas fa-circle-check text-success me-1"></i>All deliveries complete &bull; Available (Idle)`;
+                        hudDistanceText.innerText = `0.0 km`;
+                        hudEtaText.innerText = `-- mins`;
+                    }
+                }
+            })
+            .catch(err => console.error('Error fetching driver active route: ', err));
+    }
+
+    // High Accuracy GPS Watcher
+    function startGpsTracking() {
+        if (!navigator.geolocation) {
+            if (gpsStatusBadge) {
+                gpsStatusBadge.className = 'badge bg-warning bg-opacity-10 text-warning border border-warning';
+                gpsStatusBadge.innerHTML = '<i class="fa-solid fa-triangle-exclamation me-1"></i>GPS Unsupported';
+            }
+            return;
+        }
+
+        if (gpsStatusBadge) {
+            gpsStatusBadge.className = 'badge bg-info bg-opacity-10 text-info border border-info';
+            gpsStatusBadge.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-1"></i>Acquiring GPS...';
+        }
+
+        const geoOptions = {
+            enableHighAccuracy: true,
+            maximumAge: 2000,
+            timeout: 10000
+        };
+
+        const onGpsSuccess = (position) => {
+            const lat = position.coords.latitude;
+            const lng = position.coords.longitude;
+            const accuracy = Math.round(position.coords.accuracy || 0);
+
+            if (gpsStatusBadge) {
+                gpsStatusBadge.className = 'badge bg-success bg-opacity-10 text-success border border-success';
+                gpsStatusBadge.innerHTML = `<i class="fa-solid fa-satellite-dish me-1"></i>GPS Active (&plusmn;${accuracy}m)`;
+            }
+
+            updateDriverMarker(lat, lng);
+
+            // If location sharing is enabled and not simulating, broadcast real GPS coordinates
+            if (shareLocationToggle && shareLocationToggle.checked && (!simulateToggle || !simulateToggle.checked)) {
+                sendLocationUpdate(lat, lng);
+            }
+        };
+
+        const onGpsError = (err) => {
+            console.warn('Geolocation watchPosition error: ', err.message);
+            if (gpsStatusBadge) {
+                gpsStatusBadge.className = 'badge bg-danger bg-opacity-10 text-danger border border-danger';
+                gpsStatusBadge.innerHTML = '<i class="fa-solid fa-triangle-exclamation me-1"></i>GPS Denied/Weak';
+            }
+        };
+
+        // Get single quick fix first
+        navigator.geolocation.getCurrentPosition(onGpsSuccess, onGpsError, geoOptions);
+
+        // Continuous watching
+        if (watchPositionId !== null) {
+            navigator.geolocation.clearWatch(watchPositionId);
+        }
+        watchPositionId = navigator.geolocation.watchPosition(onGpsSuccess, onGpsError, geoOptions);
+    }
+
+    // Stop GPS Watcher
+    function stopGpsTracking() {
+        if (watchPositionId !== null) {
+            navigator.geolocation.clearWatch(watchPositionId);
+            watchPositionId = null;
+        }
+        if (gpsStatusBadge) {
+            gpsStatusBadge.className = 'badge bg-secondary bg-opacity-10 text-secondary border border-secondary';
+            gpsStatusBadge.innerHTML = '<i class="fa-solid fa-satellite-dish me-1"></i>GPS Standby';
+        }
+    }
+
+    // Simulation Traversal Loop
+    function startSimulation() {
+        if (simulationTimer) clearInterval(simulationTimer);
+        pathIndex = 0;
+
+        simulationTimer = setInterval(() => {
+            if (pathCoordinates && pathCoordinates.length > 0) {
+                const coord = pathCoordinates[pathIndex];
+                updateDriverMarker(coord.lat, coord.lng);
+                
+                // Broadcast simulated coordinate
+                if (shareLocationToggle && shareLocationToggle.checked) {
+                    sendLocationUpdate(coord.lat, coord.lng, 'On Delivery');
+                }
+
+                if (gpsStatusBadge) {
+                    gpsStatusBadge.className = 'badge bg-primary bg-opacity-10 text-primary border border-primary';
+                    gpsStatusBadge.innerHTML = `<i class="fa-solid fa-route me-1"></i>Simulating Transit (${pathIndex + 1}/${pathCoordinates.length})`;
+                }
+
+                pathIndex = (pathIndex + 1) % pathCoordinates.length;
+            }
+        }, 2000);
+    }
+
+    function stopSimulation() {
+        if (simulationTimer) {
+            clearInterval(simulationTimer);
+            simulationTimer = null;
+        }
+        if (shareLocationToggle && shareLocationToggle.checked) {
+            startGpsTracking();
+        }
+    }
+
+    // Wire Driver State Dropdown
+    if (driverStateSelect) {
+        driverStateSelect.addEventListener('change', function () {
+            const newState = this.value;
+            fetch('/api/driver/update-state', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ state: newState })
+            })
+            .then(res => res.json())
+            .then(data => {
+                showToast('State Updated', `Operational state set to: ${newState}`, 'success');
+                fetchAndRenderActiveRoute();
+            })
+            .catch(err => console.error('State update error: ', err));
+        });
+    }
+
+    // Wire Share Location Toggle
+    if (shareLocationToggle) {
+        const driverId = shareLocationToggle.getAttribute('data-driver-id');
+        const storedShareState = localStorage.getItem('shareLocation_' + driverId);
+
+        const enableSharing = () => {
+            shareLocationToggle.checked = true;
+            localStorage.setItem('shareLocation_' + driverId, 'true');
+            if (simulateToggle && simulateToggle.checked) {
+                startSimulation();
+            } else {
+                startGpsTracking();
+            }
+            fetchAndRenderActiveRoute();
+        };
+
+        const disableSharing = () => {
+            shareLocationToggle.checked = false;
+            localStorage.setItem('shareLocation_' + driverId, 'false');
+            stopGpsTracking();
+            stopSimulation();
+            sendLocationUpdate(null, null, driverStateSelect ? driverStateSelect.value : 'Offline');
+        };
+
+        shareLocationToggle.addEventListener('change', function () {
+            if (this.checked) {
+                enableSharing();
+                showToast('GPS Broadcast Online', 'Broadcasting live coordinates to fleet manager & clients.', 'success');
+            } else {
+                disableSharing();
+                showToast('GPS Broadcast Offline', 'Live GPS broadcast paused.', 'warning');
+            }
+        });
+
+        // Initialize state on load
+        if (storedShareState === 'true') {
+            enableSharing();
+        } else {
+            // Default to starting GPS tracking for local map view
+            startGpsTracking();
+        }
+    }
+
+    // Wire Simulate Movement Toggle
+    if (simulateToggle) {
+        const driverId = shareLocationToggle ? shareLocationToggle.getAttribute('data-driver-id') : 'default';
+        const storedSimState = localStorage.getItem('simulateLocation_' + driverId);
+
+        simulateToggle.addEventListener('change', function () {
+            localStorage.setItem('simulateLocation_' + driverId, this.checked ? 'true' : 'false');
+            if (this.checked) {
+                startSimulation();
+                showToast('Transit Simulation Active', 'Moving driver along turn-by-turn road polyline.', 'info');
+            } else {
+                stopSimulation();
+                showToast('Transit Simulation Stopped', 'Switched back to device GPS receiver.', 'secondary');
+            }
+        });
+
+        if (storedSimState === 'true') {
+            simulateToggle.checked = true;
+            startSimulation();
+        }
+    }
+
+    // Initialize Map and Load Initial Route
+    initDriverMap();
+    fetchAndRenderActiveRoute();
+
+    // Periodic refresh of route geometry every 25 seconds
+    routeFetchInterval = setInterval(fetchAndRenderActiveRoute, 25000);
 });

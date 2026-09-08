@@ -660,43 +660,106 @@ document.addEventListener('DOMContentLoaded', function () {
         if (editMap) editMap.invalidateSize();
     });
 
-    // Nominatim geocoder search
-    const geocodeAddress = (query, marker, targetMap, latInput, lngInput) => {
-        if (!query) return;
-        const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query + ', Kathmandu')}&limit=1`;
+    // Nominatim geocoder search with multi-tier precision
+    const geocodeAddress = (query, marker, targetMap, latInput, lngInput, btnEl) => {
+        if (!query || query.trim().length === 0) {
+            alert("Please enter a destination address or place name.");
+            return;
+        }
         
-        fetch(url)
-            .then(res => res.json())
-            .then(results => {
-                if (results && results.length > 0) {
-                    const lat = parseFloat(results[0].lat);
-                    const lon = parseFloat(results[0].lon);
-                    
-                    // Kathmandu boundary check
-                    if (lat >= 27.50 && lat <= 27.90 && lon >= 85.10 && lon <= 85.55) {
-                        marker.setLatLng([lat, lon]);
-                        targetMap.setView([lat, lon], 14);
-                        latInput.value = lat.toFixed(6);
-                        lngInput.value = lon.toFixed(6);
-                    } else {
-                        alert("Selected search result falls outside Kathmandu Valley boundaries.");
-                    }
-                } else {
-                    alert("Location not found. Please try dragging the marker manually.");
+        const cleanQ = query.trim();
+        const originalBtnHtml = btnEl ? btnEl.innerHTML : null;
+        if (btnEl) {
+            btnEl.disabled = true;
+            btnEl.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Finding...';
+        }
+
+        const queryList = [
+            cleanQ.toLowerCase().includes('nepal') ? cleanQ : `${cleanQ}, Kathmandu, Nepal`,
+            cleanQ.toLowerCase().includes('kathmandu') ? cleanQ : `${cleanQ}, Kathmandu`,
+            cleanQ
+        ];
+
+        const trySearch = (idx) => {
+            if (idx >= queryList.length) {
+                if (btnEl) {
+                    btnEl.disabled = false;
+                    btnEl.innerHTML = originalBtnHtml;
                 }
-            })
-            .catch(err => console.error("Geocoding failed: ", err));
+                alert(`Location "${cleanQ}" not found. Please drag the marker on the map to pinpoint.`);
+                return;
+            }
+
+            const url = `https://nominatim.openstreetmap.org/search?format=json&countrycodes=np&limit=5&q=${encodeURIComponent(queryList[idx])}`;
+            fetch(url)
+                .then(res => res.json())
+                .then(results => {
+                    if (results && results.length > 0) {
+                        let bestMatch = results.find(item => {
+                            const lat = parseFloat(item.lat);
+                            const lon = parseFloat(item.lon);
+                            return lat >= 27.50 && lat <= 27.90 && lon >= 85.10 && lon <= 85.55;
+                        });
+                        if (!bestMatch) bestMatch = results[0];
+
+                        const lat = parseFloat(bestMatch.lat);
+                        const lon = parseFloat(bestMatch.lon);
+                        
+                        if (lat >= 27.50 && lat <= 27.90 && lon >= 85.10 && lon <= 85.55) {
+                            marker.setLatLng([lat, lon]);
+                            targetMap.flyTo([lat, lon], 15);
+                            latInput.value = lat.toFixed(6);
+                            lngInput.value = lon.toFixed(6);
+                            if (btnEl) {
+                                btnEl.disabled = false;
+                                btnEl.innerHTML = '<i class="fas fa-check text-success me-1"></i>Found';
+                                setTimeout(() => { if (btnEl) btnEl.innerHTML = originalBtnHtml; }, 2000);
+                            }
+                        } else {
+                            if (btnEl) {
+                                btnEl.disabled = false;
+                                btnEl.innerHTML = originalBtnHtml;
+                            }
+                            alert("Found location is outside the active Kathmandu Valley boundaries.");
+                        }
+                    } else {
+                        trySearch(idx + 1);
+                    }
+                })
+                .catch(err => {
+                    console.error("Geocoding failed: ", err);
+                    trySearch(idx + 1);
+                });
+        };
+
+        trySearch(0);
     };
 
-    document.getElementById('btn-search-delivery-edit').addEventListener('click', function () {
-        geocodeAddress(
-            document.getElementById('delivery_address_edit').value,
-            editDeliveryMarker,
-            editMap,
-            document.getElementById('delivery_latitude_edit'),
-            document.getElementById('delivery_longitude_edit')
-        );
-    });
+    const btnSearchEdit = document.getElementById('btn-search-delivery-edit');
+    if (btnSearchEdit) {
+        btnSearchEdit.addEventListener('click', function () {
+            geocodeAddress(
+                document.getElementById('delivery_address_edit').value,
+                editDeliveryMarker,
+                editMap,
+                document.getElementById('delivery_latitude_edit'),
+                document.getElementById('delivery_longitude_edit'),
+                this
+            );
+        });
+    }
+
+    const editAddrInput = document.getElementById('delivery_address_edit');
+    if (editAddrInput && btnSearchEdit) {
+        editAddrInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                e.stopPropagation();
+                btnSearchEdit.click();
+                return false;
+            }
+        });
+    }
 });
 </script>
 {% endblock %}

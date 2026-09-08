@@ -98,6 +98,16 @@
                         <span class="badge bg-secondary-subtle text-dark border-0 rounded-pill">{{ parcel.tracking_id }}</span>
                     </div>
                     
+                    {% if parcel.manifest %}
+                    <div class="mb-3 p-3 bg-primary bg-opacity-10 rounded-3 border border-primary border-opacity-25">
+                        <span class="d-block text-primary small fw-semibold"><i class="fas fa-truck-moving me-1"></i>Group Dispatch Manifest Batch</span>
+                        <div class="d-flex justify-content-between align-items-center mt-1">
+                            <strong class="text-dark">{{ parcel.manifest.manifest_number }}</strong>
+                            <span class="badge bg-primary rounded-pill">Truck Transit</span>
+                        </div>
+                    </div>
+                    {% endif %}
+
                     <div class="mb-3">
                         <span class="d-block text-muted" style="font-size: 0.7rem;">Pickup Hub Node</span>
                         <strong class="text-dark">{{ parcel.pickup_address }}</strong>
@@ -138,65 +148,51 @@
                     <!-- Select Alternative Route list -->
                     <div class="premium-card-title mb-2" style="font-size: 0.95rem;">
                         <span><i class="fas fa-route me-2 text-primary"></i>All Possible Routes</span>
-                        <span class="badge bg-primary-subtle text-primary border-0 rounded-pill" style="font-size: 0.65rem;">Alternative Paths</span>
                     </div>
-                    <div id="alternative_routes_list" class="mb-3">
-                        <p class="text-muted mb-0" style="font-size: 0.8rem;"><i class="fas fa-spinner fa-spin me-2"></i>Loading possible routes...</p>
+                    <div id="routeSegmentsList" class="mb-3">
+                        <!-- Dynamic Alternatives via JS -->
                     </div>
 
-                    <!-- Route Conditions list -->
-                    <div class="premium-card-title mb-2" style="font-size: 0.95rem; border-top: 1px solid #E2E8F0; padding-top: 12px; margin-top: 12px;">
-                        <span><i class="fas fa-traffic-light me-2 text-primary"></i>Traffic & Road Conditions</span>
-                        <span class="badge bg-info-subtle text-info border-0 rounded-pill" style="font-size: 0.65rem;">Selected Path</span>
-                    </div>
-                    <div id="route_segments_list">
-                        <p class="text-muted mb-0" style="font-size: 0.8rem;"><i class="fas fa-spinner fa-spin me-2"></i>Loading route segments...</p>
-                    </div>
-                </div>
-
-                <!-- Simulated Notifications feed -->
-                <div class="premium-card mb-4" style="max-height: 200px; overflow-y: auto;">
                     <div class="premium-card-title mb-2" style="font-size: 0.95rem;">
-                        <span><i class="fas fa-message me-2 text-primary"></i>Simulated Notifications Logs</span>
+                        <span><i class="fas fa-triangle-exclamation me-2 text-warning"></i>Live Road Conditions</span>
                     </div>
-                    <div id="notification_alerts_feed">
-                        <!-- Populated by JS -->
+                    <div id="roadConditionsList">
+                        <!-- Dynamic Traffic Segments via JS -->
                     </div>
                 </div>
 
-
-                <!-- Timeline Audit -->
+                <!-- Live Milestones & Tracking History -->
                 <div class="premium-card mb-0">
-                    <div class="premium-card-title mb-2">
-                        <span><i class="fas fa-timeline me-2 text-primary"></i>Handoff Timeline</span>
+                    <div class="premium-card-title mb-3">
+                        <span><i class="fas fa-timeline me-2 text-primary"></i>Journey Milestones</span>
                     </div>
                     
-                    <div class="tracking-timeline">
+                    <div class="timeline-container">
                         <div class="timeline-step" data-status-key="Pending">
                             <div class="timeline-dot"><i class="fas fa-check"></i></div>
                             <div class="timeline-content">
                                 <span class="timeline-title">Order Booked</span>
-                                <span class="timeline-meta">Awaiting driver assignment</span>
+                                <span class="timeline-meta">{{ parcel.created_at.strftime('%Y-%m-%d %H:%M') }}</span>
                             </div>
                         </div>
                         <div class="timeline-step" data-status-key="Assigned">
                             <div class="timeline-dot"><i class="fas fa-check"></i></div>
                             <div class="timeline-content">
-                                <span class="timeline-title">Driver Dispatched</span>
-                                <span class="timeline-meta">Nearest driver traveling to pickup</span>
+                                <span class="timeline-title">Courier Assigned</span>
+                                <span class="timeline-meta">Allocated to nearest courier</span>
                             </div>
                         </div>
                         <div class="timeline-step" data-status-key="Picked Up">
                             <div class="timeline-dot"><i class="fas fa-check"></i></div>
                             <div class="timeline-content">
                                 <span class="timeline-title">Picked Up</span>
-                                <span class="timeline-meta">Package verification complete</span>
+                                <span class="timeline-meta">Consignment in possession</span>
                             </div>
                         </div>
                         <div class="timeline-step" data-status-key="In Transit">
                             <div class="timeline-dot"><i class="fas fa-check"></i></div>
                             <div class="timeline-content">
-                                <span class="timeline-title">In Transit</span>
+                                <span class="timeline-title">In Transit (Hub Route)</span>
                                 <span class="timeline-meta">Simulated valley traversal</span>
                             </div>
                         </div>
@@ -233,6 +229,97 @@
                 </div>
             </div>
         </div>
+        {% elif manifest %}
+        <!-- MANIFEST GROUP TRACKING VIEW -->
+        <div class="row g-4">
+            <div class="col-12 col-lg-4">
+                <div class="premium-card bg-primary text-white border-0 shadow-lg mb-4" style="background: linear-gradient(135deg, var(--primary-color) 0%, #1E40AF 100%) !important;">
+                    <h5 class="fw-bold mb-3"><i class="fas fa-truck-moving me-2 text-white"></i>Group Freight Telemetry</h5>
+                    <div class="row g-3 mb-3 text-center">
+                        <div class="col-4 border-end border-white border-opacity-10">
+                            <span class="d-block text-white-50" style="font-size: 0.7rem;">ETA</span>
+                            <strong id="mnf_eta_pub" style="font-size: 1.15rem;">-- Mins</strong>
+                        </div>
+                        <div class="col-4 border-end border-white border-opacity-10">
+                            <span class="d-block text-white-50" style="font-size: 0.7rem;">Distance</span>
+                            <strong id="mnf_dist_pub" style="font-size: 1.15rem;">-- Km</strong>
+                        </div>
+                        <div class="col-4">
+                            <span class="d-block text-white-50" style="font-size: 0.7rem;">Speed</span>
+                            <strong id="mnf_speed_pub" style="font-size: 1.15rem;">-- km/h</strong>
+                        </div>
+                    </div>
+                    <div class="progress bg-white bg-opacity-20 mb-2" style="height: 6px;">
+                        <div class="progress-bar bg-white" id="mnf_prog_pub" style="width: {% if manifest.manifest_status == 'Completed' %}100%{% elif manifest.manifest_status == 'Dispatched' %}50%{% else %}0%{% endif %};"></div>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center" style="font-size: 0.75rem;">
+                        <span id="mnf_prog_text_pub">{{ manifest.manifest_status }}</span>
+                        <span class="fw-bold text-uppercase">{{ manifest.manifest_status }}</span>
+                    </div>
+                </div>
+
+                <div class="premium-card mb-4">
+                    <div class="premium-card-title mb-3">
+                        <span><i class="fas fa-boxes-packing me-2 text-primary"></i>Manifest Batch Summary</span>
+                        <span class="badge bg-primary rounded-pill">{{ manifest.manifest_number }}</span>
+                    </div>
+                    <div class="mb-3">
+                        <span class="d-block text-muted small">Origin Hub</span>
+                        <strong class="text-dark">{{ manifest.origin_hub.name if manifest.origin_hub else 'N/A' }} Hub</strong>
+                    </div>
+                    <div class="mb-3">
+                        <span class="d-block text-muted small">Destination Hub</span>
+                        <strong class="text-dark">{{ manifest.destination_hub.name if manifest.destination_hub else 'N/A' }} Hub</strong>
+                    </div>
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <span class="d-block text-muted small">Total Parcels</span>
+                            <strong class="text-dark">{{ manifest.total_parcels }} Packages</strong>
+                        </div>
+                        <div class="col-6">
+                            <span class="d-block text-muted small">Total Weight</span>
+                            <strong class="text-dark">{{ manifest.total_weight }} kg</strong>
+                        </div>
+                    </div>
+                    <div class="border-top pt-2">
+                        <span class="d-block text-muted small">Assigned Courier & Truck</span>
+                        <strong class="text-dark">{{ manifest.assigned_driver.name if manifest.assigned_driver else 'Unassigned' }}</strong> 
+                        {% if manifest.assigned_vehicle %}<span class="badge bg-light text-dark border ms-1">{{ manifest.assigned_vehicle.vehicle_code }}</span>{% endif %}
+                    </div>
+                </div>
+
+                <!-- Attached Parcels List -->
+                <div class="premium-card mb-0" style="max-height: 300px; overflow-y: auto;">
+                    <div class="premium-card-title mb-2">
+                        <span><i class="fas fa-list-check me-2 text-primary"></i>Batched Shipments ({{ manifest.items|length }})</span>
+                    </div>
+                    <ul class="list-group list-group-flush small">
+                        {% for item in manifest.items %}
+                        <li class="list-group-item px-0 d-flex justify-content-between align-items-center">
+                            <div>
+                                <strong class="text-primary">{{ item.parcel.tracking_id }}</strong><br>
+                                <span class="text-muted">{{ item.parcel.sender_name }} &rarr; {{ item.parcel.receiver_name }}</span>
+                            </div>
+                            <span class="badge bg-light text-dark border">{{ item.parcel.weight }} kg</span>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Right Manifest Map Pane -->
+            <div class="col-12 col-lg-8">
+                <div class="premium-card h-100 p-0 overflow-hidden mb-0" style="min-height: 520px; position: relative;">
+                    <div class="p-3 m-0 bg-transparent border-bottom border-light no-print" style="position: absolute; top: 0; left: 0; right: 0; z-index: 1000; background-color: rgba(255, 255, 255, 0.95) !important; backdrop-filter: blur(8px);">
+                        <div class="d-flex align-items-center justify-content-between">
+                            <span><i class="fas fa-truck-fast me-2 text-primary"></i>Freight Vehicle Live Road Route</span>
+                            <span class="badge bg-success-subtle text-success border-0 rounded-pill">Live GPS</span>
+                        </div>
+                    </div>
+                    <div id="manifestPublicMap" style="width: 100%; height: 600px;"></div>
+                </div>
+            </div>
+        </div>
         {% endif %}
     </div>
 </div>
@@ -241,5 +328,71 @@
 {% block extra_js %}
 {% if parcel %}
 <script src="{{ url_for('static', filename='js/tracking.js') }}"></script>
+{% elif manifest %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const manifestId = {{ manifest.id }};
+    const map = L.map('manifestPublicMap').setView([27.7172, 85.3240], 12);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+
+    function createIcon(iconClass, bgClass) {
+        return L.divIcon({
+            className: 'custom-leaflet-icon',
+            html: `<div class="pulse-marker-icon ${bgClass}" style="width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; box-shadow: 0 4px 6px rgba(0,0,0,0.2);">
+                    <i class="${iconClass}" style="font-size: 14px;"></i>
+                   </div>`,
+            iconSize: [32, 32],
+            iconAnchor: [16, 16]
+        });
+    }
+
+    let truckMarker = null;
+
+    fetch(`/api/manifest/${manifestId}/route`)
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) return;
+            L.marker([data.origin.lat, data.origin.lng], { icon: createIcon('fas fa-warehouse', 'bg-primary') }).addTo(map).bindPopup(`<strong>Origin:</strong> ${data.origin.name}`);
+            L.marker([data.destination.lat, data.destination.lng], { icon: createIcon('fas fa-warehouse', 'bg-success') }).addTo(map).bindPopup(`<strong>Destination:</strong> ${data.destination.name}`);
+
+            if (data.driver && data.driver.lat && data.driver.lng) {
+                truckMarker = L.marker([data.driver.lat, data.driver.lng], { icon: createIcon('fas fa-truck', 'bg-warning text-dark') }).addTo(map).bindPopup(`<strong>Truck:</strong> ${data.driver.vehicle}`);
+            }
+
+            let bounds = [];
+            if (data.segments && data.segments.length > 0) {
+                data.segments.forEach(seg => {
+                    if (seg.coordinates && seg.coordinates.length > 0) {
+                        const pts = seg.coordinates.map(p => [p.lat, p.lng]);
+                        bounds.push(...pts);
+                        L.polyline(pts, { color: '#1E293B', weight: 8, opacity: 0.9 }).addTo(map);
+                        L.polyline(pts, { color: '#2563EB', weight: 4, opacity: 1.0 }).addTo(map);
+                    }
+                });
+            }
+            if (bounds.length > 0) map.fitBounds(L.latLngBounds(bounds), { padding: [40, 40] });
+        });
+
+    function poll() {
+        fetch(`/api/manifest/${manifestId}/telemetry`)
+            .then(r => r.json())
+            .then(tel => {
+                if (tel.driver_latitude && tel.driver_longitude) {
+                    if (truckMarker) truckMarker.setLatLng([tel.driver_latitude, tel.driver_longitude]);
+                    else truckMarker = L.marker([tel.driver_latitude, tel.driver_longitude], { icon: createIcon('fas fa-truck', 'bg-warning text-dark') }).addTo(map);
+                }
+                document.getElementById('mnf_eta_pub').textContent = tel.eta_minutes + ' Mins';
+                document.getElementById('mnf_dist_pub').textContent = tel.distance_remaining_km + ' Km';
+                document.getElementById('mnf_speed_pub').textContent = tel.speed_kmh + ' km/h';
+                document.getElementById('mnf_prog_pub').style.width = tel.progress_percent + '%';
+                document.getElementById('mnf_prog_text_pub').textContent = tel.progress_percent + '% Completed';
+            });
+    }
+    poll();
+    setInterval(poll, 10000);
+});
+</script>
 {% endif %}
 {% endblock %}

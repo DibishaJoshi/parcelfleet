@@ -42,6 +42,9 @@
         
         <!-- Actions Buttons -->
         <div class="d-flex align-items-center gap-2">
+            <a href="{{ url_for('delivery_optimization') }}" class="btn btn-outline-primary rounded-pill px-3">
+                <i class="fas fa-route me-2"></i>Multi-Courier Dispatch
+            </a>
             <button class="btn btn-outline-secondary rounded-pill px-3" onclick="exportReportToCSV('parcelfleet_parcels.csv')">
                 <i class="fas fa-file-csv me-2"></i>Export CSV
             </button>
@@ -136,7 +139,7 @@
 <div class="modal fade" id="bookParcelModal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered modal-lg">
         <div class="modal-content border-0 shadow-lg" style="border-radius: 16px; background-color: var(--card-bg);">
-            <form method="POST" action="{{ url_for('book_parcel') }}">
+            <form method="POST" action="{{ url_for('book_parcel') }}" id="bookParcelForm">
                 <div class="modal-header border-bottom border-light p-4">
                     <h5 class="modal-title fw-bold text-dark"><i class="fas fa-boxes-packing text-primary me-2"></i>Book New Parcel Shipping Order</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
@@ -343,36 +346,91 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     };
 
-    // Geocoding and Reverse Geocoding helpers
-    const geocodeAddress = (query, marker, mapInstance, latInput, lngInput, addressInput) => {
-        if (!query) return;
-        const kathmanduQuery = query.toLowerCase().includes('kathmandu') ? query : query + ', Kathmandu';
-        fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=np&q=${encodeURIComponent(kathmanduQuery)}`)
-            .then(res => res.json())
-            .then(data => {
-                if (data && data.length > 0) {
-                    const lat = parseFloat(data[0].lat);
-                    const lng = parseFloat(data[0].lon);
-                    
-                    if (lat >= 27.50 && lat <= 27.90 && lng >= 85.10 && lng <= 85.55) {
-                        marker.setLatLng([lat, lng]);
-                        latInput.value = lat.toFixed(6);
-                        lngInput.value = lng.toFixed(6);
-                        
-                        const simpleAddr = data[0].display_name.split(',').slice(0, 3).join(',').trim();
-                        addressInput.value = simpleAddr;
-                        mapInstance.flyTo([lat, lng], 14);
-                    } else {
-                        alert("Resolved coordinates reside outside Kathmandu bounds (Lat: 27.50-27.90, Lng: 85.10-85.55).");
-                    }
-                } else {
-                    alert("No matching locations found. Please refine your query.");
+    // Geocoding and Reverse Geocoding helpers with Kathmandu Valley precision
+    const geocodeAddress = (query, marker, mapInstance, latInput, lngInput, addressInput, btnElement) => {
+        if (!query || query.trim().length === 0) {
+            alert("Please enter an address or location name to find.");
+            return;
+        }
+
+        const cleanQ = query.trim();
+        const originalBtnHtml = btnElement ? btnElement.innerHTML : null;
+        if (btnElement) {
+            btnElement.disabled = true;
+            btnElement.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Finding...';
+        }
+
+        const queryList = [
+            cleanQ.toLowerCase().includes('nepal') ? cleanQ : `${cleanQ}, Kathmandu, Nepal`,
+            cleanQ.toLowerCase().includes('kathmandu') ? cleanQ : `${cleanQ}, Kathmandu`,
+            cleanQ
+        ];
+
+        const trySearch = (index) => {
+            if (index >= queryList.length) {
+                if (btnElement) {
+                    btnElement.disabled = false;
+                    btnElement.innerHTML = originalBtnHtml;
                 }
-            })
-            .catch(err => {
-                console.error(err);
-                alert("Geocoding service unavailable.");
-            });
+                alert(`Location "${cleanQ}" not found. Please verify the spelling or manually drag the pin marker on the map.`);
+                return;
+            }
+
+            const currentQuery = queryList[index];
+            const url = `https://nominatim.openstreetmap.org/search?format=json&countrycodes=np&limit=5&q=${encodeURIComponent(currentQuery)}`;
+
+            fetch(url)
+                .then(res => res.json())
+                .then(data => {
+                    if (data && data.length > 0) {
+                        // Prioritize results matching Kathmandu Valley bounding box
+                        let bestMatch = data.find(item => {
+                            const lat = parseFloat(item.lat);
+                            const lng = parseFloat(item.lon);
+                            return lat >= 27.50 && lat <= 27.90 && lng >= 85.10 && lng <= 85.55;
+                        });
+
+                        if (!bestMatch) {
+                            bestMatch = data[0];
+                        }
+
+                        const lat = parseFloat(bestMatch.lat);
+                        const lng = parseFloat(bestMatch.lon);
+
+                        if (lat >= 27.50 && lat <= 27.90 && lng >= 85.10 && lng <= 85.55) {
+                            marker.setLatLng([lat, lng]);
+                            latInput.value = lat.toFixed(6);
+                            lngInput.value = lng.toFixed(6);
+
+                            const simpleAddr = bestMatch.display_name.split(',').slice(0, 3).join(',').trim();
+                            addressInput.value = simpleAddr;
+
+                            mapInstance.flyTo([lat, lng], 15, { animate: true, duration: 0.8 });
+                            marker.bindPopup(`<b>${simpleAddr}</b><br><small class="text-muted">Lat: ${lat.toFixed(4)}, Lng: ${lng.toFixed(4)}</small>`).openPopup();
+
+                            if (btnElement) {
+                                btnElement.disabled = false;
+                                btnElement.innerHTML = '<i class="fas fa-check text-success me-1"></i>Found';
+                                setTimeout(() => { if (btnElement) btnElement.innerHTML = originalBtnHtml; }, 2000);
+                            }
+                        } else {
+                            if (btnElement) {
+                                btnElement.disabled = false;
+                                btnElement.innerHTML = originalBtnHtml;
+                            }
+                            alert(`Found "${bestMatch.display_name}", but it is outside the active Kathmandu Valley boundaries (Lat: 27.50-27.90, Lng: 85.10-85.55).`);
+                        }
+                    } else {
+                        trySearch(index + 1);
+                    }
+                })
+                .catch(err => {
+                    console.error("Geocoding network error:", err);
+                    trySearch(index + 1);
+                });
+        };
+
+        trySearch(0);
     };
 
     const reverseGeocode = (lat, lng, addressInput) => {
@@ -451,12 +509,117 @@ document.addEventListener('DOMContentLoaded', function () {
                 });
                 
                 // Search bindings
-                document.getElementById('btnSearchPickup').addEventListener('click', function() {
-                    geocodeAddress(document.getElementById('pickup_address').value, bookPickupMarker, bookMap, document.getElementById('pickup_latitude'), document.getElementById('pickup_longitude'), document.getElementById('pickup_address'));
+                const btnPickup = document.getElementById('btnSearchPickup');
+                const btnDelivery = document.getElementById('btnSearchDelivery');
+
+                btnPickup.addEventListener('click', function() {
+                    geocodeAddress(
+                        document.getElementById('pickup_address').value,
+                        bookPickupMarker,
+                        bookMap,
+                        document.getElementById('pickup_latitude'),
+                        document.getElementById('pickup_longitude'),
+                        document.getElementById('pickup_address'),
+                        this
+                    );
                 });
-                document.getElementById('btnSearchDelivery').addEventListener('click', function() {
-                    geocodeAddress(document.getElementById('delivery_address').value, bookDeliveryMarker, bookMap, document.getElementById('delivery_latitude'), document.getElementById('delivery_longitude'), document.getElementById('delivery_address'));
+
+                btnDelivery.addEventListener('click', function() {
+                    geocodeAddress(
+                        document.getElementById('delivery_address').value,
+                        bookDeliveryMarker,
+                        bookMap,
+                        document.getElementById('delivery_latitude'),
+                        document.getElementById('delivery_longitude'),
+                        document.getElementById('delivery_address'),
+                        this
+                    );
                 });
+
+                // PREVENT ENTER KEY FROM SUBMITTING FORM IN SEARCH INPUTS - TRIGGER SEARCH INSTEAD
+                const pickupInput = document.getElementById('pickup_address');
+                const deliveryInput = document.getElementById('delivery_address');
+
+                if (pickupInput) {
+                    pickupInput.addEventListener('keydown', function(e) {
+                        if (e.key === 'Enter') {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            btnPickup.click();
+                            return false;
+                        }
+                    });
+                }
+
+                if (deliveryInput) {
+                    deliveryInput.addEventListener('keydown', function(e) {
+                        if (e.key === 'Enter') {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            btnDelivery.click();
+                            return false;
+                        }
+                    });
+                }
+
+                // COMPREHENSIVE BOOKING FORM VALIDATION
+                const bookForm = document.getElementById('bookParcelForm');
+                if (bookForm) {
+                    bookForm.addEventListener('submit', function(e) {
+                        const pLat = parseFloat(document.getElementById('pickup_latitude').value);
+                        const pLng = parseFloat(document.getElementById('pickup_longitude').value);
+                        const dLat = parseFloat(document.getElementById('delivery_latitude').value);
+                        const dLng = parseFloat(document.getElementById('delivery_longitude').value);
+                        const weight = parseFloat(document.getElementById('parcel_weight').value);
+                        const length = parseFloat(document.getElementById('parcel_length').value);
+                        const width = parseFloat(document.getElementById('parcel_width').value);
+                        const height = parseFloat(document.getElementById('parcel_height').value);
+                        const sPhone = document.querySelector('input[name="sender_phone"]').value.trim();
+                        const rPhone = document.querySelector('input[name="receiver_phone"]').value.trim();
+                        const sName = document.querySelector('input[name="sender_name"]').value.trim();
+                        const rName = document.querySelector('input[name="receiver_name"]').value.trim();
+
+                        if (!sName || !rName) {
+                            e.preventDefault();
+                            alert("Validation Error: Sender and Receiver full names are required.");
+                            return false;
+                        }
+
+                        const phoneRegex = /^9[678]\d{8}$/;
+                        if (!phoneRegex.test(sPhone)) {
+                            e.preventDefault();
+                            alert("Validation Error: Sender phone must be a 10-digit Nepali number starting with 98, 97, or 96.");
+                            return false;
+                        }
+                        if (!phoneRegex.test(rPhone)) {
+                            e.preventDefault();
+                            alert("Validation Error: Receiver phone must be a 10-digit Nepali number starting with 98, 97, or 96.");
+                            return false;
+                        }
+
+                        if (isNaN(pLat) || isNaN(pLng) || pLat < 27.50 || pLat > 27.90 || pLng < 85.10 || pLng > 85.55) {
+                            e.preventDefault();
+                            alert("Validation Error: Pickup coordinates must reside within Kathmandu Valley boundaries (Lat: 27.50-27.90, Lng: 85.10-85.55).");
+                            return false;
+                        }
+                        if (isNaN(dLat) || isNaN(dLng) || dLat < 27.50 || dLat > 27.90 || dLng < 85.10 || dLng > 85.55) {
+                            e.preventDefault();
+                            alert("Validation Error: Delivery coordinates must reside within Kathmandu Valley boundaries (Lat: 27.50-27.90, Lng: 85.10-85.55).");
+                            return false;
+                        }
+
+                        if (isNaN(weight) || weight <= 0) {
+                            e.preventDefault();
+                            alert("Validation Error: Parcel weight must be greater than 0 kg.");
+                            return false;
+                        }
+                        if (isNaN(length) || length <= 0 || isNaN(width) || width <= 0 || isNaN(height) || height <= 0) {
+                            e.preventDefault();
+                            alert("Validation Error: Package dimensions (Length, Width, Height) must be positive numbers.");
+                            return false;
+                        }
+                    });
+                }
             } else {
                 bookMap.invalidateSize();
             }

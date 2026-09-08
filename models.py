@@ -79,6 +79,27 @@ class Driver(db.Model):
     parcels = db.relationship('Parcel', backref='assigned_driver', foreign_keys="Parcel.assigned_driver_id")
     assignments = db.relationship('Assignment', backref='driver', cascade="all, delete-orphan")
 
+    @property
+    def effective_capacity_weight(self):
+        """Returns the driver's vehicle weight capacity in kg."""
+        if self.assigned_vehicle and self.assigned_vehicle.capacity_weight:
+            return float(self.assigned_vehicle.capacity_weight)
+        return 30.0  # Default bike capacity fallback (kg)
+
+    @property
+    def effective_capacity_volume(self):
+        """Returns the driver's vehicle volume capacity in cubic meters (m3)."""
+        if self.assigned_vehicle and self.assigned_vehicle.capacity_volume:
+            return float(self.assigned_vehicle.capacity_volume)
+        return 0.2  # Default bike volume fallback (m3)
+
+    @property
+    def vehicle_type_name(self):
+        """Returns vehicle type string or 'Bike' as fallback."""
+        if self.assigned_vehicle:
+            return self.assigned_vehicle.vehicle_type
+        return 'Bike'
+
 class VehicleMaintenance(db.Model):
     __tablename__ = 'vehicle_maintenance'
     
@@ -153,44 +174,6 @@ class ManifestItem(db.Model):
     # Relationships
     parcel = db.relationship('Parcel', backref='manifest_items')
 
-class Shipper(db.Model):
-    __tablename__ = 'shippers'
-    
-    id = db.Column(db.Integer, primary_key=True)
-    company_name = db.Column(db.String(100), nullable=False)
-    contact_person = db.Column(db.String(100), nullable=False)
-    phone = db.Column(db.String(20), nullable=False)
-    email = db.Column(db.String(100), nullable=True)
-    address = db.Column(db.String(255), nullable=False)
-    billing_address = db.Column(db.String(255), nullable=True)
-    credit_limit = db.Column(db.Float, default=0.0)
-    outstanding_balance = db.Column(db.Float, default=0.0)
-    status = db.Column(db.String(30), default='Active')  # 'Active', 'Inactive', 'Suspended'
-    
-    hub_id = db.Column(db.Integer, db.ForeignKey('hubs.id'), nullable=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    
-    parcels = db.relationship('Parcel', backref='shipper', cascade="all, delete-orphan")
-
-class Consignee(db.Model):
-    __tablename__ = 'consignees'
-    
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(100), nullable=False)
-    phone = db.Column(db.String(20), nullable=False)
-    alternate_phone = db.Column(db.String(20), nullable=True)
-    address = db.Column(db.String(255), nullable=False)
-    city = db.Column(db.String(100), nullable=True, default='Kathmandu')
-    state = db.Column(db.String(100), nullable=True, default='Bagmati')
-    country = db.Column(db.String(100), nullable=True, default='Nepal')
-    postal_code = db.Column(db.String(20), nullable=True)
-    delivery_instructions = db.Column(db.Text, nullable=True)
-    
-    hub_id = db.Column(db.Integer, db.ForeignKey('hubs.id'), nullable=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    
-    parcels = db.relationship('Parcel', backref='consignee', cascade="all, delete-orphan")
-
 class Merchandise(db.Model):
     __tablename__ = 'merchandise'
     
@@ -243,8 +226,6 @@ class Parcel(db.Model):
     
     # Extended Multi-Hub & Linked Relations
     hub_id = db.Column(db.Integer, db.ForeignKey('hubs.id'), nullable=True)
-    shipper_id = db.Column(db.Integer, db.ForeignKey('shippers.id'), nullable=True)
-    consignee_id = db.Column(db.Integer, db.ForeignKey('consignees.id'), nullable=True)
     merchandise_id = db.Column(db.Integer, db.ForeignKey('merchandise.id'), nullable=True)
     manifest_id = db.Column(db.Integer, db.ForeignKey('manifests.id'), nullable=True)
     expected_delivery_date = db.Column(db.DateTime, nullable=True)
@@ -273,6 +254,11 @@ class Parcel(db.Model):
     @property
     def chargeable_weight(self):
         return max(self.weight, self.volumetric_weight)
+
+    @property
+    def volume_m3(self):
+        """Volume in cubic meters (m3), computed from dimensions in cm."""
+        return (self.length * self.width * self.height) / 1000000.0
 
 class TrackingHistory(db.Model):
     __tablename__ = 'tracking_history'
@@ -305,8 +291,6 @@ class Hub(db.Model):
     vehicles = db.relationship('Vehicle', backref='hub', cascade="all, delete-orphan")
     drivers = db.relationship('Driver', backref='hub', cascade="all, delete-orphan", foreign_keys="Driver.hub_id")
     parcels = db.relationship('Parcel', backref='hub', cascade="all, delete-orphan", foreign_keys="Parcel.hub_id")
-    shippers = db.relationship('Shipper', backref='hub', cascade="all, delete-orphan")
-    consignees = db.relationship('Consignee', backref='hub', cascade="all, delete-orphan")
 
 class HubAdmin(db.Model):
     __tablename__ = 'hub_admins'

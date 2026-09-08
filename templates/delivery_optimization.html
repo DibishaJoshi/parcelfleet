@@ -1,0 +1,357 @@
+{% extends "base.html" %}
+
+{% block title %}Multi-Courier Delivery Optimization - ParcelFleet{% endblock %}
+{% block page_title %}Multi-Courier Delivery Optimization{% endblock %}
+
+{% block content %}
+<div class="container-fluid p-0">
+    <!-- Header Controls & Execution -->
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 gap-3">
+        <div>
+            <h3 class="fw-bold mb-1">
+                <i class="fa-solid fa-route text-primary me-2"></i>Multi-Courier Delivery Optimization
+            </h3>
+            <p class="text-muted mb-0">
+                Capacity-constrained fleet assignment using <strong>Dijkstra</strong> shortest path matrices & <strong>TSP</strong> optimal delivery sequencing.
+            </p>
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+            {% if optimization_result.courier_routes %}
+            <form action="{{ url_for('execute_multi_dispatch') }}" method="POST">
+                <button type="submit" class="btn btn-primary d-inline-flex align-items-center gap-2 shadow-sm" onclick="return confirm('Confirm and dispatch all optimized courier routes?');">
+                    <i class="fa-solid fa-paper-plane"></i>
+                    <span>Confirm & Dispatch All Couriers</span>
+                </button>
+            </form>
+            {% endif %}
+            <a href="{{ url_for('delivery_optimization') }}" class="btn btn-outline-secondary d-inline-flex align-items-center gap-2">
+                <i class="fa-solid fa-arrows-rotate"></i>
+                <span>Re-Calculate Optimization</span>
+            </a>
+        </div>
+    </div>
+
+    <!-- Optimization KPI Overview Cards -->
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-md-3">
+            <div class="card border-0 shadow-sm p-3 h-100">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="rounded-circle bg-primary bg-opacity-10 p-3 text-primary">
+                        <i class="fa-solid fa-boxes-packing fa-lg"></i>
+                    </div>
+                    <div>
+                        <div class="text-muted small">Pending Deliveries</div>
+                        <h4 class="fw-bold mb-0 text-dark">{{ optimization_result.summary.total_deliveries }}</h4>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card border-0 shadow-sm p-3 h-100">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="rounded-circle bg-success bg-opacity-10 p-3 text-success">
+                        <i class="fa-solid fa-circle-check fa-lg"></i>
+                    </div>
+                    <div>
+                        <div class="text-muted small">Assigned & Routed</div>
+                        <h4 class="fw-bold mb-0 text-success">{{ optimization_result.summary.assigned_count }}</h4>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card border-0 shadow-sm p-3 h-100">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="rounded-circle {% if optimization_result.summary.unassigned_count > 0 %}bg-danger bg-opacity-10 text-danger{% else %}bg-secondary bg-opacity-10 text-secondary{% endif %} p-3">
+                        <i class="fa-solid fa-triangle-exclamation fa-lg"></i>
+                    </div>
+                    <div>
+                        <div class="text-muted small">Unassigned (Capacity)</div>
+                        <h4 class="fw-bold mb-0 {% if optimization_result.summary.unassigned_count > 0 %}text-danger{% else %}text-muted{% endif %}">
+                            {{ optimization_result.summary.unassigned_count }}
+                        </h4>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card border-0 shadow-sm p-3 h-100">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="rounded-circle bg-info bg-opacity-10 p-3 text-info">
+                        <i class="fa-solid fa-motorcycle fa-lg"></i>
+                    </div>
+                    <div>
+                        <div class="text-muted small">Couriers Utilized</div>
+                        <h4 class="fw-bold mb-0 text-dark">{{ optimization_result.summary.total_couriers_used }}</h4>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Unassigned Deliveries Alert (if any) -->
+    {% if optimization_result.unassigned_deliveries %}
+    <div class="card border-0 shadow-sm mb-4 border-start border-danger border-4">
+        <div class="card-body p-4">
+            <div class="d-flex align-items-center justify-content-between mb-3">
+                <h5 class="fw-bold text-danger mb-0">
+                    <i class="fa-solid fa-triangle-exclamation me-2"></i>Unassigned Deliveries (Fleet Capacity Insufficient)
+                </h5>
+                <span class="badge bg-danger rounded-pill px-3">{{ optimization_result.unassigned_deliveries|length }} Parcels</span>
+            </div>
+            <p class="text-muted small mb-3">
+                The following parcels could not be accommodated in the current delivery run because all available couriers reached their vehicle weight or volume capacity limits.
+            </p>
+            <div class="table-responsive">
+                <table class="table table-sm table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Tracking ID</th>
+                            <th>Recipient</th>
+                            <th>Delivery Address</th>
+                            <th>Weight</th>
+                            <th>Volume</th>
+                            <th>Reason</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for u in optimization_result.unassigned_deliveries %}
+                        <tr>
+                            <td><strong class="text-primary">{{ u.tracking_id }}</strong></td>
+                            <td>{{ u.receiver_name }}</td>
+                            <td><small class="text-muted">{{ u.delivery_address }}</small></td>
+                            <td><span class="badge bg-light text-dark border">{{ u.weight }} kg</span></td>
+                            <td><span class="badge bg-light text-dark border">{{ u.volume_m3 }} m³</span></td>
+                            <td><span class="text-danger small"><i class="fa-solid fa-circle-xmark me-1"></i>{{ u.reason }}</span></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Interactive Multi-Courier Route Map -->
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-white py-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <div class="d-flex align-items-center gap-2">
+                <i class="fa-solid fa-map-location-dot text-primary"></i>
+                <h5 class="fw-bold mb-0">Optimized Multi-Courier Delivery Map</h5>
+            </div>
+            <div class="small text-muted">
+                <i class="fa-solid fa-layer-group me-1"></i>Showing {{ optimization_result.courier_routes|length }} distinct courier paths
+            </div>
+        </div>
+        <div class="card-body p-0 position-relative">
+            <div id="multiCourierMap" style="height: 520px; width: 100%; border-radius: 0 0 12px 12px;"></div>
+        </div>
+        <!-- Map Route Legend -->
+        <div class="card-footer bg-light p-3">
+            <div class="d-flex flex-wrap align-items-center gap-3">
+                <span class="small fw-bold text-muted text-uppercase">Courier Routes:</span>
+                {% for route in optimization_result.courier_routes %}
+                <div class="d-flex align-items-center gap-2 bg-white px-2 py-1 rounded border">
+                    <span style="display: inline-block; width: 14px; height: 14px; border-radius: 50%; background-color: {{ route.color }};"></span>
+                    <span class="small fw-semibold">{{ route.courier_name }} ({{ route.vehicle_type }})</span>
+                    <span class="badge bg-light text-muted border">{{ route.total_stops }} stops</span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Courier Itineraries & Capacity Breakdown Cards -->
+    <h4 class="fw-bold mb-3"><i class="fa-solid fa-list-check text-primary me-2"></i>Courier Delivery Runs & Capacity Metrics</h4>
+    
+    <div class="row g-4 mb-4">
+        {% for route in optimization_result.courier_routes %}
+        <div class="col-12 col-lg-6">
+            <div class="card border-0 shadow-sm h-100" style="border-top: 4px solid {{ route.color }} !important;">
+                <div class="card-body p-4">
+                    <!-- Courier Header -->
+                    <div class="d-flex justify-content-between align-items-start mb-3">
+                        <div>
+                            <div class="d-flex align-items-center gap-2">
+                                <span style="display: inline-block; width: 12px; height: 12px; border-radius: 50%; background-color: {{ route.color }};"></span>
+                                <h5 class="fw-bold mb-0 text-dark">{{ route.courier_name }}</h5>
+                            </div>
+                            <small class="text-muted"><i class="fa-solid fa-phone me-1"></i>{{ route.courier_phone }} | Vehicle: {{ route.vehicle_type }} ({{ route.license_plate }})</small>
+                        </div>
+                        <span class="badge rounded-pill" style="background-color: {{ route.color }}; color: #fff;">
+                            {{ route.total_stops }} Stops Assigned
+                        </span>
+                    </div>
+
+                    <!-- Capacity Load vs Limit Meters -->
+                    <div class="bg-light p-3 rounded mb-3">
+                        <!-- Weight Capacity -->
+                        <div class="mb-2">
+                            <div class="d-flex justify-content-between small fw-semibold mb-1">
+                                <span><i class="fa-solid fa-weight-hanging me-1 text-primary"></i>Weight Load:</span>
+                                <span>{{ route.assigned_weight }} kg / {{ route.capacity_weight }} kg ({{ route.utilization_weight_pct }}%)</span>
+                            </div>
+                            <div class="progress" style="height: 8px;">
+                                <div class="progress-bar" role="progressbar" style="width: {{ route.utilization_weight_pct }}%; background-color: {{ route.color }};"></div>
+                            </div>
+                            <div class="text-end small text-muted mt-1">Remaining: <strong>{{ route.remaining_weight }} kg</strong></div>
+                        </div>
+
+                        <!-- Volume Capacity -->
+                        <div>
+                            <div class="d-flex justify-content-between small fw-semibold mb-1">
+                                <span><i class="fa-solid fa-cube me-1 text-info"></i>Volume Load:</span>
+                                <span>{{ route.assigned_volume }} m³ / {{ route.capacity_volume }} m³ ({{ route.utilization_volume_pct }}%)</span>
+                            </div>
+                            <div class="progress" style="height: 8px;">
+                                <div class="progress-bar bg-info" role="progressbar" style="width: {{ route.utilization_volume_pct }}%;"></div>
+                            </div>
+                            <div class="text-end small text-muted mt-1">Remaining: <strong>{{ route.remaining_volume }} m³</strong></div>
+                        </div>
+                    </div>
+
+                    <!-- Route Metrics & TSP Delivery Itinerary -->
+                    <div class="d-flex justify-content-between align-items-center mb-3 text-muted small">
+                        <span><i class="fa-solid fa-road me-1"></i>Total Distance: <strong class="text-dark">{{ route.total_distance_km }} km</strong></span>
+                        <span><i class="fa-solid fa-clock me-1"></i>Est. Duration: <strong class="text-dark">{{ route.estimated_duration_min }} mins</strong></span>
+                    </div>
+
+                    <h6 class="fw-bold text-dark small text-uppercase mb-2"><i class="fa-solid fa-arrow-down-1-9 me-1"></i>Optimal Delivery Sequence (TSP):</h6>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover align-middle mb-0" style="font-size: 0.85rem;">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>#</th>
+                                    <th>Tracking ID</th>
+                                    <th>Recipient</th>
+                                    <th>Address</th>
+                                    <th>Weight</th>
+                                    <th>Leg Dist</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for stop in route.ordered_stops %}
+                                <tr>
+                                    <td>
+                                        <span class="badge rounded-circle text-white d-inline-flex align-items-center justify-content-center" style="width: 22px; height: 22px; background-color: {{ route.color }}; font-size: 0.75rem;">
+                                            {{ stop.stop_number }}
+                                        </span>
+                                    </td>
+                                    <td><strong>{{ stop.tracking_id }}</strong></td>
+                                    <td>{{ stop.receiver_name }}</td>
+                                    <td><small class="text-muted">{{ stop.delivery_address }}</small></td>
+                                    <td>{{ stop.weight }} kg</td>
+                                    <td><span class="badge bg-light text-dark border">{{ stop.leg_distance_km }} km</span></td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <div class="col-12">
+            <div class="card border-0 shadow-sm p-5 text-center text-muted">
+                <i class="fa-solid fa-circle-check fa-3x text-success mb-3"></i>
+                <h5 class="fw-bold text-dark">No Pending Deliveries in Queue</h5>
+                <p class="mb-0">All current orders are already assigned or completed. New booking orders will appear here automatically for multi-courier optimization.</p>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<!-- LEAFLET MULTI-COURIER ROUTING SCRIPT -->
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const optimizationData = {{ optimization_result|tojson }};
+    
+    // Initialize Map Centered on Kathmandu Valley
+    const map = L.map('multiCourierMap').setView([27.7172, 85.3240], 12);
+    
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '© OpenStreetMap contributors'
+    }).addTo(map);
+
+    if (!optimizationData || !optimizationData.courier_routes || optimizationData.courier_routes.length === 0) {
+        return;
+    }
+
+    const bounds = L.latLngBounds([]);
+
+    // Custom Icon Builder
+    const createStopMarkerIcon = (stopNumber, color) => {
+        return L.divIcon({
+            html: `<div style="background-color: ${color}; color: #ffffff; width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 11px; border: 2px solid #ffffff; box-shadow: 0 2px 5px rgba(0,0,0,0.3);">${stopNumber}</div>`,
+            className: 'custom-stop-icon',
+            iconSize: [26, 26],
+            iconAnchor: [13, 13]
+        });
+    };
+
+    const createCourierStartIcon = (color) => {
+        return L.divIcon({
+            html: `<div style="background-color: ${color}; color: #ffffff; width: 34px; height: 34px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 16px; border: 2px solid #ffffff; box-shadow: 0 3px 8px rgba(0,0,0,0.4);"><i class="fa-solid fa-motorcycle"></i></div>`,
+            className: 'custom-courier-icon',
+            iconSize: [34, 34],
+            iconAnchor: [17, 17]
+        });
+    };
+
+    // Render Each Courier's Path and Numbered Waypoints
+    optimizationData.courier_routes.forEach((route, index) => {
+        const routeColor = route.color || '#4F46E5';
+
+        // 1. Courier Starting Origin Marker
+        const startMarker = L.marker([route.courier_lat, route.courier_lng], {
+            icon: createCourierStartIcon(routeColor)
+        }).addTo(map);
+
+        startMarker.bindPopup(`
+            <div style="font-size: 13px;">
+                <strong style="color: ${routeColor}; font-size: 14px;">Courier: ${route.courier_name}</strong><br>
+                <strong>Vehicle:</strong> ${route.vehicle_type} (${route.license_plate})<br>
+                <strong>Assigned Load:</strong> ${route.assigned_weight} kg (${route.utilization_weight_pct}%)<br>
+                <strong>Total Stops:</strong> ${route.total_stops}
+            </div>
+        `);
+        bounds.extend([route.courier_lat, route.courier_lng]);
+
+        // 2. Numbered Delivery Stops
+        route.ordered_stops.forEach(stop => {
+            const stopMarker = L.marker([stop.lat, stop.lng], {
+                icon: createStopMarkerIcon(stop.stop_number, routeColor)
+            }).addTo(map);
+
+            stopMarker.bindPopup(`
+                <div style="font-size: 13px;">
+                    <strong style="color: ${routeColor};">Stop #${stop.stop_number} - ${stop.receiver_name}</strong><br>
+                    <strong>Tracking ID:</strong> ${stop.tracking_id}<br>
+                    <strong>Address:</strong> ${stop.delivery_address}<br>
+                    <strong>Weight:</strong> ${stop.weight} kg | <strong>Leg Distance:</strong> ${stop.leg_distance_km} km<br>
+                    <small class="text-muted">Courier: ${route.courier_name}</small>
+                </div>
+            `);
+            bounds.extend([stop.lat, stop.lng]);
+        });
+
+        // 3. Polyline Road Path
+        if (route.route_polyline && route.route_polyline.length > 0) {
+            const latlngs = route.route_polyline.map(p => [p.lat, p.lng]);
+            L.polyline(latlngs, {
+                color: routeColor,
+                weight: 5,
+                opacity: 0.85,
+                lineJoin: 'round'
+            }).addTo(map);
+        }
+    });
+
+    if (bounds.isValid()) {
+        map.fitBounds(bounds.pad(0.1));
+    }
+});
+</script>
+{% endblock %}
