@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+
+{% block title %}Pricing & Zones - ParcelFleet{% endblock %}
+{% block page_title %}Pricing Rules & Logistics Zones{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+    <!-- Left: Add Pricing Rule -->
+    <div class="col-12 col-lg-4">
+        <div class="card border-0 shadow-sm rounded-4 bg-white p-4">
+            <h5 class="fw-bold text-dark mb-3"><i class="fas fa-plus-circle text-primary me-2"></i>Add Pricing Matrix Rule</h5>
+            
+            <form method="POST" action="{{ url_for('add_pricing_rule') }}">
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold">Origin Hub (Optional / Any)</label>
+                    <select class="form-select rounded-3" name="origin_hub_id">
+                        <option value="">-- All / Universal Origin --</option>
+                        {% for h in hubs %}
+                        <option value="{{ h.id }}">{{ h.name }} Hub</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold">Destination Hub (Optional / Any)</label>
+                    <select class="form-select rounded-3" name="destination_hub_id">
+                        <option value="">-- All / Universal Destination --</option>
+                        {% for h in hubs %}
+                        <option value="{{ h.id }}">{{ h.name }} Hub</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold">Service Type *</label>
+                    <select class="form-select rounded-3" name="service_type">
+                        <option value="Standard">Standard (Surface)</option>
+                        <option value="Express">Express (Priority Air)</option>
+                    </select>
+                </div>
+                <div class="row g-2 mb-3">
+                    <div class="col-6">
+                        <label class="form-label small fw-semibold">Base Price (Rs.) *</label>
+                        <input type="number" name="base_rate" class="form-control rounded-3" value="100" required>
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label small fw-semibold">Base Wt (kg)</label>
+                        <input type="number" name="base_weight_kg" class="form-control rounded-3" value="1.0" step="0.5">
+                    </div>
+                </div>
+                <div class="row g-2 mb-4">
+                    <div class="col-6">
+                        <label class="form-label small fw-semibold">Extra Rate / kg *</label>
+                        <input type="number" name="extra_kg_rate" class="form-control rounded-3" value="40" required>
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label small fw-semibold">SLA (Hours)</label>
+                        <input type="number" name="delivery_time_hours" class="form-control rounded-3" value="24">
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary w-100 rounded-pill fw-bold py-2 shadow-sm">
+                    <i class="fas fa-save me-1"></i>Save Pricing Rule
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Right: Pricing Rules List -->
+    <div class="col-12 col-lg-8">
+        <div class="card border-0 shadow-sm rounded-4 bg-white p-4">
+            <h5 class="fw-bold text-dark mb-3"><i class="fas fa-tags text-success me-2"></i>Active Logistics Zones & Pricing Rules ({{ rules | length }})</h5>
+
+            <div class="table-responsive">
+                <table class="table table-hover align-middle">
+                    <thead class="table-light">
+                        <tr class="small text-muted">
+                            <th>Origin ➔ Destination</th>
+                            <th>Service Type</th>
+                            <th>Base Rate</th>
+                            <th>Extra / kg</th>
+                            <th>SLA</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for r in rules %}
+                        <tr>
+                            <td>
+                                <strong>{{ r.origin_hub.name if r.origin_hub else 'Universal' }}</strong> ➔ 
+                                <strong>{{ r.destination_hub.name if r.destination_hub else 'Universal' }}</strong>
+                            </td>
+                            <td><span class="badge bg-primary-subtle text-primary rounded-pill">{{ r.service_type }}</span></td>
+                            <td>Rs. {{ r.base_rate }} (up to {{ r.base_weight_kg }}kg)</td>
+                            <td>+Rs. {{ r.extra_kg_rate }}/kg</td>
+                            <td>{{ r.delivery_time_hours }}h</td>
+                            <td>
+                                <a href="{{ url_for('delete_pricing_rule', id=r.id) }}" class="btn btn-sm btn-outline-danger rounded-pill px-2 py-0" onclick="return confirm('Delete pricing rule?')">
+                                    <i class="fas fa-trash-can"></i>
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

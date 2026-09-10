@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+
+{% block title %}Invoices & Billing - Customer Portal{% endblock %}
+{% block page_title %}Shipment Invoices & Proof of Delivery{% endblock %}
+
+{% block content %}
+<div class="card border-0 shadow-sm rounded-4 bg-white p-4">
+    <div class="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom">
+        <div>
+            <h4 class="fw-bold text-dark mb-1"><i class="fas fa-file-invoice text-primary me-2"></i>Invoices & Billing Statements</h4>
+            <p class="text-muted small mb-0">Company: {{ company.company_name if company else 'ParcelFleet' }} &bull; VAT/PAN: {{ company.vat_pan_number if company else '601234567' }}</p>
+        </div>
+    </div>
+
+    {% if not parcels %}
+    <div class="text-center py-5 text-muted">
+        <i class="fas fa-receipt fa-3x mb-3 text-secondary opacity-50"></i>
+        <h6>No invoices generated yet.</h6>
+    </div>
+    {% else %}
+    <div class="table-responsive">
+        <table class="table table-hover align-middle">
+            <thead class="table-light">
+                <tr class="small text-muted">
+                    <th>Invoice / AWB No</th>
+                    <th>Date</th>
+                    <th>Recipient</th>
+                    <th>Destination</th>
+                    <th>Charge (NPR)</th>
+                    <th>Status</th>
+                    <th>POD Verification</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for p in parcels %}
+                <tr>
+                    <td><strong class="text-primary font-monospace">INV-{{ p.tracking_id }}</strong></td>
+                    <td><small class="text-muted">{{ p.created_at.strftime('%Y-%m-%d') }}</small></td>
+                    <td>{{ p.receiver_name }}</td>
+                    <td><small>{{ p.delivery_address }}</small></td>
+                    <td><strong>Rs. {{ p.delivery_charge }}</strong></td>
+                    <td>
+                        <span class="badge bg-{% if p.payment_status == 'Paid' %}success{% else %}warning{% endif %}-subtle text-{% if p.payment_status == 'Paid' %}success{% else %}warning{% endif %} rounded-pill px-2 py-1">
+                            {{ p.payment_status }}
+                        </span>
+                    </td>
+                    <td>
+                        {% if p.status == 'Delivered' %}
+                        <a href="{{ url_for('view_proof_of_delivery', id=p.id) }}" target="_blank" class="btn btn-sm btn-outline-success rounded-pill px-3">
+                            <i class="fas fa-file-signature me-1"></i>POD Voucher
+                        </a>
+                        {% else %}
+                        <span class="text-muted small">Pending Delivery</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

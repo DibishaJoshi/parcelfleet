@@ -253,41 +253,75 @@ def get_route_segments(path, pickup_coords=None, delivery_coords=None):
 def greedy_driver_assignment(parcel, available_drivers):
     """
     Greedy Driver Assignment: Finds the closest available driver
-    to the parcel's pickup hub coordinate.
-    Enforces business rules:
-      - Parcels > 5.0 kg must be grouped as manifests (returns None)
-      - Parcels <= 5.0 kg must be delivered by Bike drivers
-    Returns: (driver_object, distance) or (None, None)
+    to the parcel's pickup coordinate whose assigned vehicle has 
+    sufficient remaining weight and volume capacity.
+    
+    Parameters:
+      - parcel: Parcel model or dict
+      - available_drivers: list of Driver models
+      
+    Returns: (driver_object, distance_km) or (None, None)
     """
-    if parcel.weight > 5.0:
-        return None, None
-        
-    bike_drivers = []
-    for d in available_drivers:
-        if d.availability == 'Available' and d.assigned_vehicle and d.assigned_vehicle.vehicle_type == 'Bike':
-            bike_drivers.append(d)
-            
-    if not bike_drivers:
+    if not available_drivers:
         return None, None
 
-    all_hubs = get_all_hubs_dict()
-    pickup_hub = all_hubs.get(parcel.pickup_hub)
-    if not pickup_hub:
-        pickup_lat = parcel.pickup_latitude
-        pickup_lng = parcel.pickup_longitude
-    else:
-        pickup_lat = pickup_hub['lat']
-        pickup_lng = pickup_hub['lng']
+    parcel_weight = float(getattr(parcel, 'weight', 1.0) or 1.0)
     
+    # Calculate parcel volume
+    if hasattr(parcel, 'volume_m3'):
+        parcel_volume = float(parcel.volume_m3 or 0.005)
+    elif hasattr(parcel, 'length') and hasattr(parcel, 'width') and hasattr(parcel, 'height') and parcel.length and parcel.width and parcel.height:
+        parcel_volume = float((parcel.length * parcel.width * parcel.height) / 1000000.0)
+    else:
+        parcel_volume = 0.005
+
+    pickup_lat = getattr(parcel, 'pickup_latitude', 27.7172)
+    pickup_lng = getattr(parcel, 'pickup_longitude', 85.3240)
+
+    capable_drivers = []
+    for d in available_drivers:
+        if getattr(d, 'availability', 'Available') in ['Available', 'On Delivery']:
+            # Determine vehicle capacity
+            vehicle = getattr(d, 'assigned_vehicle', None)
+            if vehicle:
+                cap_w = float(vehicle.capacity_weight or 50.0)
+                cap_v = float(vehicle.capacity_volume or 0.5)
+            else:
+                cap_w = 30.0  # Default bike capacity
+                cap_v = 0.2
+
+            # Calculate current load of driver's active parcels
+            current_weight = 0.0
+            current_volume = 0.0
+            driver_parcels = getattr(d, 'parcels', getattr(d, 'assigned_parcels', [])) or []
+            for p in driver_parcels:
+                if getattr(p, 'status', None) not in ['Delivered', 'Cancelled'] and getattr(p, 'id', None) != getattr(parcel, 'id', None):
+                    current_weight += float(getattr(p, 'weight', 0.0) or 0.0)
+                    p_len = getattr(p, 'length', None)
+                    p_wid = getattr(p, 'width', None)
+                    p_hgt = getattr(p, 'height', None)
+                    if p_len and p_wid and p_hgt:
+                        current_volume += float((p_len * p_wid * p_hgt) / 1000000.0)
+                    else:
+                        current_volume += 0.005
+
+            # Enforce capacity
+            if (current_weight + parcel_weight <= cap_w + 1e-6) and (current_volume + parcel_volume <= cap_v + 1e-6):
+                capable_drivers.append((d, cap_w - current_weight))
+
+    if not capable_drivers:
+        return None, None
+
+    # Find closest capable driver based on live location distance to pickup point
     closest_driver = None
     min_distance = float('inf')
-    
-    for driver in bike_drivers:
+
+    for driver, rem_cap in capable_drivers:
         dist = haversine_distance(driver.latitude, driver.longitude, pickup_lat, pickup_lng)
         if dist < min_distance:
             min_distance = dist
             closest_driver = driver
-                
+
     return closest_driver, min_distance
 
 def get_route_coordinates(path):

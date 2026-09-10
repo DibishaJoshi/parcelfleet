@@ -1,22 +1,22 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="light">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}ParcelFleet{% endblock %} - Smart Courier & Fleet Management</title>
+    <title>{% block title %}ParcelFleet - Intelligent Logistics{% endblock %}</title>
     
-    <!-- Google Fonts (Poppins & Inter) -->
+    <!-- Google Fonts: Inter -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- FontAwesome 6.4 (Free CDN) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
     <!-- Bootstrap 5 CSS -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     
-    <!-- FontAwesome v6 -->
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" rel="stylesheet">
-    
-    <!-- Leaflet.js Map CSS & JS -->
+    <!-- Leaflet CSS & JS for Interactive Visual Maps -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     
@@ -37,7 +37,6 @@
         <!-- SIDEBAR NAVIGATION -->
         <aside class="sidebar" id="sidebar">
             <div class="brand">
-                <!-- Cargo Truck SVG Logo -->
                 <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <rect x="6" y="24" width="34" height="24" rx="4" fill="#3B82F6"/>
                     <path d="M40 28H48L56 36V48H40V28Z" fill="#60A5FA"/>
@@ -49,29 +48,48 @@
             </div>
             
             <ul class="sidebar-nav">
-                {% if current_user.role in ['admin', 'hub_admin', 'booking_staff', 'warehouse_staff', 'dispatcher', 'branch_staff'] %}
+                {% if current_user.role == 'admin' %}
+                <!-- ADMIN PORTAL NAVIGATION -->
                 <li class="sidebar-nav-item {% if active_page == 'dashboard' %}active{% endif %}">
                     <a href="{{ url_for('admin_dashboard') }}">
                         <i class="fa-solid fa-chart-line"></i>
-                        <span>Dashboard</span>
+                        <span>Admin Dashboard</span>
+                    </a>
+                </li>
+                <li class="sidebar-nav-item {% if active_page == 'hubs' %}active{% endif %}">
+                    <a href="{{ url_for('manage_hubs') }}">
+                        <i class="fa-solid fa-warehouse"></i>
+                        <span>Branches & Hubs</span>
+                    </a>
+                </li>
+                <li class="sidebar-nav-item {% if active_page == 'pricing_rules' %}active{% endif %}">
+                    <a href="{{ url_for('pricing_rules') }}">
+                        <i class="fa-solid fa-tags"></i>
+                        <span>Pricing & Zones</span>
+                    </a>
+                </li>
+                <li class="sidebar-nav-item {% if active_page == 'users' %}active{% endif %}">
+                    <a href="{{ url_for('manage_users') }}">
+                        <i class="fa-solid fa-users-gear"></i>
+                        <span>User Management</span>
                     </a>
                 </li>
                 <li class="sidebar-nav-item {% if active_page == 'parcels' %}active{% endif %}">
                     <a href="{{ url_for('manage_parcels') }}">
-                        <i class="fa-solid fa-box-open"></i>
-                        <span>Bookings & Deliveries</span>
+                        <i class="fa-solid fa-boxes-stacked"></i>
+                        <span>All Shipments</span>
                     </a>
                 </li>
                 <li class="sidebar-nav-item {% if active_page == 'manifests' %}active{% endif %}">
                     <a href="{{ url_for('manage_manifests') }}">
                         <i class="fa-solid fa-file-invoice-dollar"></i>
-                        <span>Manifests</span>
+                        <span>Freight Manifests</span>
                     </a>
                 </li>
-                <li class="sidebar-nav-item {% if active_page == 'assignments' %}active{% endif %}">
-                    <a href="{{ url_for('manage_assignments') }}">
-                        <i class="fa-solid fa-truck-ramp-box"></i>
-                        <span>Assignments</span>
+                <li class="sidebar-nav-item {% if active_page == 'delivery_sheets' %}active{% endif %}">
+                    <a href="{{ url_for('delivery_sheets') }}">
+                        <i class="fa-solid fa-clipboard-list"></i>
+                        <span>Delivery Sheets</span>
                     </a>
                 </li>
                 <li class="sidebar-nav-item {% if active_page == 'optimization' %}active{% endif %}">
@@ -83,13 +101,7 @@
                 <li class="sidebar-nav-item {% if active_page == 'vehicles' %}active{% endif %}">
                     <a href="{{ url_for('manage_vehicles') }}">
                         <i class="fa-solid fa-truck"></i>
-                        <span>Vehicles</span>
-                    </a>
-                </li>
-                <li class="sidebar-nav-item {% if active_page == 'maintenance' %}active{% endif %}">
-                    <a href="{{ url_for('manage_maintenance') }}">
-                        <i class="fa-solid fa-screwdriver-wrench"></i>
-                        <span>Maintenance</span>
+                        <span>Fleet Vehicles</span>
                     </a>
                 </li>
                 <li class="sidebar-nav-item {% if active_page == 'drivers' %}active{% endif %}">
@@ -98,41 +110,171 @@
                         <span>Drivers / Fleet</span>
                     </a>
                 </li>
-                <li class="sidebar-nav-item {% if active_page == 'merchandise' %}active{% endif %}">
-                    <a href="{{ url_for('manage_merchandise') }}">
-                        <i class="fa-solid fa-cubes"></i>
-                        <span>Merchandise</span>
+                <li class="sidebar-nav-item {% if active_page == 'cod_reconciliation' %}active{% endif %}">
+                    <a href="{{ url_for('cod_reconciliation') }}">
+                        <i class="fa-solid fa-hand-holding-dollar"></i>
+                        <span>COD Reconciliation</span>
                     </a>
                 </li>
                 <li class="sidebar-nav-item {% if active_page == 'reports' %}active{% endif %}">
                     <a href="{{ url_for('view_reports') }}">
                         <i class="fa-solid fa-chart-pie"></i>
-                        <span>Reports</span>
+                        <span>Financial Reports</span>
                     </a>
                 </li>
-                {% if current_user.role == 'admin' %}
-                <li class="sidebar-nav-item {% if active_page == 'hubs' %}active{% endif %}">
-                    <a href="{{ url_for('manage_hubs') }}">
-                        <i class="fa-solid fa-warehouse"></i>
-                        <span>Hubs</span>
+                <li class="sidebar-nav-item {% if active_page == 'company_settings' %}active{% endif %}">
+                    <a href="{{ url_for('company_settings') }}">
+                        <i class="fa-solid fa-sliders"></i>
+                        <span>Company Settings</span>
                     </a>
                 </li>
-                <li class="sidebar-nav-item {% if active_page == 'users' %}active{% endif %}">
-                    <a href="{{ url_for('manage_users') }}">
-                        <i class="fa-solid fa-users-gear"></i>
-                        <span>User Management</span>
+
+                {% elif current_user.role in ['hub_admin', 'branch_manager', 'booking_staff', 'warehouse_staff', 'dispatcher', 'branch_staff'] %}
+                <!-- BRANCH PORTAL NAVIGATION -->
+                <li class="sidebar-nav-item {% if active_page == 'branch_dashboard' %}active{% endif %}">
+                    <a href="{{ url_for('branch_dashboard') }}">
+                        <i class="fa-solid fa-chart-line"></i>
+                        <span>Branch Dashboard</span>
                     </a>
                 </li>
-                {% endif %}
+                <li class="sidebar-nav-item {% if active_page == 'branch_booking' %}active{% endif %}">
+                    <a href="{{ url_for('branch_booking') }}">
+                        <i class="fa-solid fa-box-open"></i>
+                        <span>Book Parcel</span>
+                    </a>
+                </li>
+                <li class="sidebar-nav-item {% if active_page == 'parcels' %}active{% endif %}">
+                    <a href="{{ url_for('manage_parcels') }}">
+                        <i class="fa-solid fa-boxes-stacked"></i>
+                        <span>Branch Shipments</span>
+                    </a>
+                </li>
+                <li class="sidebar-nav-item {% if active_page == 'manifests' %}active{% endif %}">
+                    <a href="{{ url_for('manage_manifests') }}">
+                        <i class="fa-solid fa-truck-moving"></i>
+                        <span>Inter-Branch Manifests</span>
+                    </a>
+                </li>
+                <li class="sidebar-nav-item {% if active_page == 'delivery_sheets' %}active{% endif %}">
+                    <a href="{{ url_for('delivery_sheets') }}">
+                        <i class="fa-solid fa-clipboard-list"></i>
+                        <span>Delivery Sheets</span>
+                    </a>
+                </li>
+                <li class="sidebar-nav-item {% if active_page == 'optimization' %}active{% endif %}">
+                    <a href="{{ url_for('delivery_optimization') }}">
+                        <i class="fa-solid fa-route"></i>
+                        <span>Route Optimization</span>
+                    </a>
+                </li>
+                <li class="sidebar-nav-item {% if active_page == 'drivers' %}active{% endif %}">
+                    <a href="{{ url_for('manage_drivers') }}">
+                        <i class="fa-solid fa-motorcycle"></i>
+                        <span>Branch Riders</span>
+                    </a>
+                </li>
+                <li class="sidebar-nav-item {% if active_page == 'reports' %}active{% endif %}">
+                    <a href="{{ url_for('view_reports') }}">
+                        <i class="fa-solid fa-chart-pie"></i>
+                        <span>Branch Reports</span>
+                    </a>
+                </li>
+
+                {% elif current_user.role == 'customer' %}
+                <!-- CUSTOMER PORTAL NAVIGATION -->
+                <li class="sidebar-nav-item {% if active_page == 'customer_dashboard' %}active{% endif %}">
+                    <a href="{{ url_for('customer_dashboard') }}">
+                        <i class="fa-solid fa-house-chimney"></i>
+                        <span>My Dashboard</span>
+                    </a>
+                </li>
+                <li class="sidebar-nav-item {% if active_page == 'customer_book' %}active{% endif %}">
+                    <a href="{{ url_for('customer_book') }}">
+                        <i class="fa-solid fa-box-open"></i>
+                        <span>Book Shipment</span>
+                    </a>
+                </li>
+                <li class="sidebar-nav-item {% if active_page == 'customer_shipments' %}active{% endif %}">
+                    <a href="{{ url_for('customer_shipments') }}">
+                        <i class="fa-solid fa-boxes-stacked"></i>
+                        <span>My Shipments</span>
+                    </a>
+                </li>
+                <li class="sidebar-nav-item {% if active_page == 'customer_addresses' %}active{% endif %}">
+                    <a href="{{ url_for('customer_addresses') }}">
+                        <i class="fa-solid fa-address-book"></i>
+                        <span>Address Book</span>
+                    </a>
+                </li>
+                <li class="sidebar-nav-item {% if active_page == 'customer_invoices' %}active{% endif %}">
+                    <a href="{{ url_for('customer_invoices') }}">
+                        <i class="fa-solid fa-file-invoice"></i>
+                        <span>Invoices & Receipts</span>
+                    </a>
+                </li>
+                <li class="sidebar-nav-item {% if active_page == 'customer_support' %}active{% endif %}">
+                    <a href="{{ url_for('customer_support_tickets') }}">
+                        <i class="fa-solid fa-headset"></i>
+                        <span>Support Tickets</span>
+                    </a>
+                </li>
+
                 {% elif current_user.role == 'driver' %}
+                <!-- PARCELFLEET RIDER PORTAL SIDEBAR MENU -->
                 <li class="sidebar-nav-item {% if active_page == 'driver_dashboard' %}active{% endif %}">
                     <a href="{{ url_for('driver_dashboard') }}">
-                        <i class="fa-solid fa-route"></i>
-                        <span>My Deliveries</span>
+                        <i class="fa-solid fa-gauge-high"></i>
+                        <span>Dashboard</span>
+                    </a>
+                </li>
+                <li class="sidebar-nav-item {% if active_page == 'driver_pickups' %}active{% endif %}">
+                    <a href="{{ url_for('driver_pickups') }}">
+                        <i class="fa-solid fa-boxes-packing"></i>
+                        <span>My Pickups</span>
+                    </a>
+                </li>
+                <li class="sidebar-nav-item {% if active_page == 'driver_tasks' %}active{% endif %}">
+                    <a href="{{ url_for('driver_tasks') }}">
+                        <i class="fa-solid fa-motorcycle"></i>
+                        <span>My Tasks</span>
+                    </a>
+                </li>
+                <li class="sidebar-nav-item {% if active_page == 'driver_route_planner' %}active{% endif %}">
+                    <a href="{{ url_for('driver_route_planner') }}">
+                        <i class="fa-solid fa-map-location-dot"></i>
+                        <span>Route Planner</span>
+                    </a>
+                </li>
+                <li class="sidebar-nav-item {% if active_page == 'driver_history' %}active{% endif %}">
+                    <a href="{{ url_for('driver_history') }}">
+                        <i class="fa-solid fa-clock-rotate-left"></i>
+                        <span>History</span>
+                    </a>
+                </li>
+                <li class="sidebar-nav-item {% if active_page == 'driver_account' %}active{% endif %}">
+                    <a href="{{ url_for('driver_account') }}">
+                        <i class="fa-solid fa-wallet"></i>
+                        <span>Account</span>
+                    </a>
+                </li>
+                <li class="sidebar-nav-item {% if active_page == 'driver_profile' %}active{% endif %}">
+                    <a href="{{ url_for('driver_profile') }}">
+                        <i class="fa-solid fa-id-badge"></i>
+                        <span>Profile</span>
                     </a>
                 </li>
                 {% endif %}
             </ul>
+
+            {% if current_user.role == 'driver' %}
+            <!-- Rider Logout Button -->
+            <div class="p-3 mt-auto border-top border-secondary border-opacity-25">
+                <a href="{{ url_for('logout') }}" class="btn btn-outline-danger w-100 d-flex align-items-center justify-content-center gap-2 rounded-pill py-2" style="border-color: rgba(239, 68, 68, 0.4); color: #EF4444; font-weight: 600;">
+                    <i class="fa-solid fa-arrow-right-from-bracket"></i>
+                    <span>Logout</span>
+                </a>
+            </div>
+            {% endif %}
         </aside>
 
         <!-- VIEWPORT WORKSPACE -->
@@ -142,7 +284,11 @@
                     <button class="toggle-sidebar" id="toggleSidebar">
                         <i class="fa-solid fa-bars"></i>
                     </button>
+                    {% if current_user.role == 'driver' %}
+                    <h4 class="mb-0 text-dark fw-bold">ParcelFleet Rider</h4>
+                    {% else %}
                     <h4 class="mb-0 text-capitalize text-dark fw-bold">{% block page_title %}{{ active_page }}{% endblock %}</h4>
+                    {% endif %}
                 </div>
                 
                 <div class="header-actions">
@@ -168,58 +314,73 @@
                         </div>
                     </div>
                     
-                    <!-- Profile dropdown -->
+                    {% if current_user.role == 'driver' %}
+                    <!-- Rider Header Profile Badge -->
+                    <div class="d-flex align-items-center gap-2 ps-2 border-start border-light">
+                        <div class="text-end d-none d-sm-block">
+                            <div class="fw-bold text-dark" style="font-size: 0.88rem; line-height: 1.1;">{{ current_user.driver_profile.name if current_user.driver_profile else current_user.username }}</div>
+                            <div class="text-muted" style="font-size: 0.72rem;">ParcelFleet Rider</div>
+                        </div>
+                        <div class="rounded-circle bg-primary bg-opacity-10 text-primary d-flex align-items-center justify-content-center fw-bold" style="width: 36px; height: 36px; font-size: 0.95rem; border: 1.5px solid rgba(59, 130, 246, 0.3);">
+                            {{ (current_user.driver_profile.name[0] if (current_user.driver_profile and current_user.driver_profile.name) else current_user.username[0]).upper() }}
+                        </div>
+                    </div>
+                    {% else %}
+                    <!-- Standard Profile dropdown -->
                     <div class="dropdown">
                         <div class="user-profile-dropdown" data-bs-toggle="dropdown">
-                            <div class="user-profile-avatar">
+                            <div class="user-avatar-circle">
                                 {{ current_user.username[0].upper() }}
                             </div>
                             <div class="d-none d-md-block text-start">
-                                <span class="d-block fw-semibold" style="font-size: 0.85rem; line-height: 1;">{{ current_user.username }}</span>
-                                <span class="text-muted text-uppercase" style="font-size: 0.75rem;">{{ current_user.role.replace('_', ' ') }}</span>
+                                <div class="fw-bold" style="font-size: 0.85rem; line-height: 1.1;">{{ current_user.username }}</div>
+                                <small class="text-muted text-capitalize" style="font-size: 0.72rem;">{{ current_user.role }}</small>
                             </div>
                         </div>
-                        <ul class="dropdown-menu dropdown-menu-end border-0 shadow" style="border-radius: 12px; background-color: var(--card-bg);">
-                            <li><a class="dropdown-item text-dark" href="{{ url_for('profile_settings') }}"><i class="fa-regular fa-user me-2"></i>Profile Settings</a></li>
+                        <ul class="dropdown-menu dropdown-menu-end shadow border-0" style="border-radius: 12px; background-color: var(--card-bg);">
+                            <li><h6 class="dropdown-header text-dark">Signed in as <strong>{{ current_user.username }}</strong></h6></li>
+                            <li><span class="dropdown-item-text text-muted small">Role: {{ current_user.role }}</span></li>
                             <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item text-danger" href="{{ url_for('logout') }}"><i class="fa-solid fa-right-from-bracket me-2"></i>Log Out</a></li>
+                            <li><a class="dropdown-item text-danger" href="{{ url_for('logout') }}"><i class="fa-solid fa-arrow-right-from-bracket me-2"></i>Sign Out</a></li>
                         </ul>
                     </div>
+                    {% endif %}
                 </div>
             </header>
-            
-            <!-- Toast notification container -->
-            <div id="toast-container" class="toast-container position-fixed bottom-0 end-0 p-3" style="z-index: 1050;"></div>
-            
-            <div class="main-content">
-                <!-- FLASHER MESSAGES -->
-                {% with messages = get_flashed_messages(with_categories=true) %}
-                    {% if messages %}
+
+            <!-- FLASH ALERTS FEEDBACK -->
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    <div class="p-3 mb-0">
                         {% for category, message in messages %}
-                            <div class="alert alert-{% if category == 'error' %}danger{% else %}{{ category }}{% endif %} alert-dismissible fade show border-0" role="alert" style="border-radius: 12px; box-shadow: var(--shadow-sm);">
-                                {{ message }}
-                                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                            <div class="alert alert-{{ 'success' if category == 'success' else 'danger' if category == 'error' else 'info' }} alert-dismissible fade show border-0 shadow-sm" role="alert" style="border-radius: 10px;">
+                                <i class="fa-solid fa-circle-info me-2"></i>{{ message }}
+                                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                             </div>
                         {% endfor %}
-                    {% endif %}
-                {% endwith %}
-                
+                    </div>
+                {% endif %}
+            {% endwith %}
+
+            <!-- MAIN WORKSPACE CONTENT INJECTION -->
+            <section class="main-content">
                 {% block content %}{% endblock %}
-            </div>
+            </section>
         </main>
     </div>
-    {% else %}
-        {% block full_content %}{% endblock %}
     {% endif %}
 
+    <!-- FULL PAGE CONTENT (FOR LOGIN, TRACKING, STANDALONE PAGES) -->
+    {% block full_content %}{% endblock %}
+
     <!-- Bootstrap 5 JS Bundle -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     
-    <!-- Custom Theme mode Switch Script -->
+    <!-- Theme Mode Switcher -->
     <script>
         function toggleThemeMode() {
-            const currentTheme = document.documentElement.getAttribute('data-theme');
-            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
+            const newTheme = currentTheme === 'light' ? 'dark' : 'light';
             
             document.documentElement.setAttribute('data-theme', newTheme);
             localStorage.setItem('theme', newTheme);

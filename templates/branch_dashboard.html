@@ -1,0 +1,184 @@
+{% extends "base.html" %}
+
+{% block title %}Branch Operations - ParcelFleet{% endblock %}
+{% block page_title %}Branch Portal: {{ hub.name if hub else 'Kathmandu Central' }} Hub{% endblock %}
+
+{% block content %}
+<div class="row g-4 mb-4">
+    <!-- Branch Overview Banner -->
+    <div class="col-12">
+        <div class="card border-0 shadow-sm rounded-4 p-4 text-white" style="background: linear-gradient(135deg, #0F172A 0%, #1E3A8A 100%);">
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
+                <div>
+                    <span class="badge bg-primary rounded-pill px-3 py-1 mb-2">BRANCH HUB STATION</span>
+                    <h3 class="fw-bold mb-1"><i class="fas fa-warehouse text-primary me-2"></i>{{ hub.name if hub else 'Kathmandu Central' }} Hub</h3>
+                    <p class="text-white-50 mb-0">Operational Sorting Center &bull; GPS: {{ hub.latitude if hub else '27.7172' }}, {{ hub.longitude if hub else '85.3240' }}</p>
+                </div>
+                <div class="d-flex gap-2">
+                    <a href="{{ url_for('branch_booking') }}" class="btn btn-primary rounded-pill px-4 fw-bold shadow-sm">
+                        <i class="fas fa-plus-circle me-1"></i>Book Parcel (Waybill)
+                    </a>
+                    <a href="{{ url_for('create_delivery_sheet') }}" class="btn btn-outline-light rounded-pill px-3">
+                        <i class="fas fa-clipboard-list me-1"></i>Create Delivery Sheet
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Metrics Cards -->
+    <div class="col-6 col-md-4 col-xl-2">
+        <div class="card border-0 shadow-sm rounded-4 p-3 bg-white">
+            <span class="text-muted small uppercase fw-bold">Total Parcels</span>
+            <h3 class="fw-bold text-dark mt-1 mb-0">{{ stats.total_parcels }}</h3>
+        </div>
+    </div>
+    <div class="col-6 col-md-4 col-xl-2">
+        <div class="card border-0 shadow-sm rounded-4 p-3 bg-white">
+            <span class="text-muted small uppercase fw-bold">Pending Booking</span>
+            <h3 class="fw-bold text-warning mt-1 mb-0">{{ stats.pending_pickups }}</h3>
+        </div>
+    </div>
+    <div class="col-6 col-md-4 col-xl-2">
+        <div class="card border-0 shadow-sm rounded-4 p-3 bg-white">
+            <span class="text-muted small uppercase fw-bold">Out For Delivery</span>
+            <h3 class="fw-bold text-primary mt-1 mb-0">{{ stats.out_for_delivery }}</h3>
+        </div>
+    </div>
+    <div class="col-6 col-md-4 col-xl-2">
+        <div class="card border-0 shadow-sm rounded-4 p-3 bg-white">
+            <span class="text-muted small uppercase fw-bold">Delivered Today</span>
+            <h3 class="fw-bold text-success mt-1 mb-0">{{ stats.delivered_today }}</h3>
+        </div>
+    </div>
+    <div class="col-6 col-md-4 col-xl-2">
+        <div class="card border-0 shadow-sm rounded-4 p-3 bg-white">
+            <span class="text-muted small uppercase fw-bold">Active Riders</span>
+            <h3 class="fw-bold text-info mt-1 mb-0">{{ stats.active_riders }}</h3>
+        </div>
+    </div>
+    <div class="col-6 col-md-4 col-xl-2">
+        <div class="card border-0 shadow-sm rounded-4 p-3 bg-white">
+            <span class="text-muted small uppercase fw-bold">Manifests</span>
+            <h3 class="fw-bold text-secondary mt-1 mb-0">{{ stats.total_manifests }}</h3>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <!-- Active Parcels at Branch -->
+    <div class="col-12 col-lg-8">
+        <div class="card border-0 shadow-sm rounded-4 bg-white p-4">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 class="fw-bold text-dark mb-0"><i class="fas fa-boxes-stacked text-primary me-2"></i>Active Hub Shipments</h5>
+                <a href="{{ url_for('manage_parcels') }}" class="btn btn-sm btn-outline-primary rounded-pill px-3">All Parcels</a>
+            </div>
+
+            {% if not recent_parcels %}
+            <div class="text-center py-5 text-muted">
+                <i class="fas fa-check-circle fa-3x mb-3 text-success opacity-50"></i>
+                <h6>No active pending parcels at this branch.</h6>
+            </div>
+            {% else %}
+            <div class="table-responsive">
+                <table class="table table-hover align-middle">
+                    <thead class="table-light">
+                        <tr class="small text-muted">
+                            <th>Waybill ID</th>
+                            <th>Sender (Shipper)</th>
+                            <th>Receiver (Consignee)</th>
+                            <th>Status</th>
+                            <th>Charge</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for p in recent_parcels %}
+                        <tr>
+                            <td>
+                                <strong class="text-primary font-monospace">{{ p.tracking_id }}</strong>
+                                <small class="d-block text-muted">{{ p.parcel_type }} &bull; {{ p.weight }}kg</small>
+                            </td>
+                            <td>
+                                <strong class="text-dark">{{ p.sender_name }}</strong>
+                                <small class="d-block text-muted">{{ p.pickup_address }}</small>
+                            </td>
+                            <td>
+                                <strong class="text-dark">{{ p.receiver_name }}</strong>
+                                <small class="d-block text-muted">{{ p.delivery_address }}</small>
+                            </td>
+                            <td>
+                                <span class="badge bg-{% if p.status == 'Delivered' %}success{% elif p.status == 'Out For Delivery' %}primary{% elif p.status == 'In Transit' %}info{% else %}warning{% endif %}-subtle text-{% if p.status == 'Delivered' %}success{% elif p.status == 'Out For Delivery' %}primary{% elif p.status == 'In Transit' %}info{% else %}warning{% endif %} rounded-pill px-2 py-1">
+                                    {{ p.status }}
+                                </span>
+                            </td>
+                            <td><strong>Rs. {{ p.delivery_charge }}</strong></td>
+                            <td>
+                                <div class="btn-group btn-group-sm">
+                                    <a href="{{ url_for('live_tracking_view', tracking_id=p.tracking_id) }}" class="btn btn-outline-primary rounded-pill px-2" title="Track">
+                                        <i class="fas fa-location-crosshairs"></i>
+                                    </a>
+                                    <a href="{{ url_for('print_shipping_label', id=p.id) }}" target="_blank" class="btn btn-outline-secondary rounded-pill px-2 ms-1" title="Label">
+                                        <i class="fas fa-print"></i>
+                                    </a>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Right Side: Branch Delivery Sheets & Active Couriers -->
+    <div class="col-12 col-lg-4">
+        <!-- Delivery Sheets Card -->
+        <div class="card border-0 shadow-sm rounded-4 bg-white p-4 mb-4">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h6 class="fw-bold text-dark mb-0"><i class="fas fa-clipboard-list text-primary me-2"></i>Recent Delivery Sheets</h6>
+                <a href="{{ url_for('create_delivery_sheet') }}" class="btn btn-sm btn-link p-0 text-decoration-none">+ Create</a>
+            </div>
+
+            {% if not delivery_sheets %}
+            <p class="text-muted small mb-0">No active delivery sheets.</p>
+            {% else %}
+            <div class="list-group list-group-flush">
+                {% for s in delivery_sheets %}
+                <div class="list-group-item px-0 py-2 border-light">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <strong class="text-dark small">{{ s.sheet_number }}</strong>
+                        <span class="badge bg-info-subtle text-info rounded-pill" style="font-size: 0.65rem;">{{ s.status }}</span>
+                    </div>
+                    <small class="text-muted d-block">Courier: {{ s.rider.name }} &bull; {{ s.total_parcels }} Parcels</small>
+                    <div class="d-flex justify-content-between align-items-center mt-1">
+                        <span class="text-muted" style="font-size: 0.75rem;">COD: Rs. {{ s.total_cod_amount }}</span>
+                        <a href="{{ url_for('view_delivery_sheet', id=s.id) }}" target="_blank" class="btn btn-sm btn-outline-secondary rounded-pill px-2 py-0" style="font-size: 0.7rem;">Print Sheet</a>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Branch Couriers -->
+        <div class="card border-0 shadow-sm rounded-4 bg-white p-4">
+            <h6 class="fw-bold text-dark mb-3"><i class="fas fa-motorcycle text-success me-2"></i>Branch Riders ({{ riders | length }})</h6>
+            <div class="list-group list-group-flush">
+                {% for r in riders %}
+                <div class="list-group-item px-0 py-2 border-light d-flex justify-content-between align-items-center">
+                    <div>
+                        <strong class="text-dark small d-block">{{ r.name }}</strong>
+                        <small class="text-muted">{{ r.vehicle_number }} ({{ r.vehicle_type_name }}) &bull; {{ r.phone }}</small>
+                    </div>
+                    <span class="badge bg-{% if r.availability == 'Available' %}success{% elif r.availability == 'On Delivery' %}primary{% else %}secondary{% endif %}-subtle text-{% if r.availability == 'Available' %}success{% elif r.availability == 'On Delivery' %}primary{% else %}secondary{% endif %} rounded-pill" style="font-size: 0.65rem;">
+                        {{ r.availability }}
+                    </span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

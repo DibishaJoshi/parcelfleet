@@ -100,6 +100,12 @@ class Driver(db.Model):
             return self.assigned_vehicle.vehicle_type
         return 'Bike'
 
+    @property
+    def assigned_parcels(self):
+        """Returns the driver's associated parcels."""
+        return self.parcels or []
+
+
 class VehicleMaintenance(db.Model):
     __tablename__ = 'vehicle_maintenance'
     
@@ -224,6 +230,10 @@ class Parcel(db.Model):
     
     assigned_driver_id = db.Column(db.Integer, db.ForeignKey('drivers.id'), nullable=True)
     
+    service_type = db.Column(db.String(50), nullable=False, default='Standard')  # 'Standard', 'Express', 'Air', 'Surface'
+    cod_amount = db.Column(db.Float, default=0.0)
+    customer_id = db.Column(db.Integer, db.ForeignKey('customer_profiles.id'), nullable=True)
+    
     # Extended Multi-Hub & Linked Relations
     hub_id = db.Column(db.Integer, db.ForeignKey('hubs.id'), nullable=True)
     merchandise_id = db.Column(db.Integer, db.ForeignKey('merchandise.id'), nullable=True)
@@ -301,3 +311,129 @@ class HubAdmin(db.Model):
     phone = db.Column(db.String(20), nullable=False, unique=True)
     email = db.Column(db.String(100), nullable=True, unique=True)
     hub_id = db.Column(db.Integer, db.ForeignKey('hubs.id'), nullable=False)
+
+class CustomerProfile(db.Model):
+    __tablename__ = 'customer_profiles'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    company_name = db.Column(db.String(150), nullable=True)
+    contact_person = db.Column(db.String(100), nullable=False)
+    phone = db.Column(db.String(20), nullable=False)
+    email = db.Column(db.String(100), nullable=True)
+    address = db.Column(db.String(255), nullable=True)
+    city = db.Column(db.String(100), nullable=True)
+    account_type = db.Column(db.String(30), default='individual')  # 'individual', 'business'
+    credit_limit = db.Column(db.Float, default=0.0)
+    balance = db.Column(db.Float, default=0.0)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    user = db.relationship('User', backref=db.backref('customer_profile', uselist=False, cascade="all, delete-orphan"))
+    addresses = db.relationship('CustomerAddress', backref='customer', cascade="all, delete-orphan")
+    support_tickets = db.relationship('SupportTicket', backref='customer', cascade="all, delete-orphan")
+
+class CustomerAddress(db.Model):
+    __tablename__ = 'customer_addresses'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    customer_id = db.Column(db.Integer, db.ForeignKey('customer_profiles.id'), nullable=False)
+    label = db.Column(db.String(50), nullable=False, default='Home')  # Home, Office, Warehouse
+    recipient_name = db.Column(db.String(100), nullable=False)
+    phone = db.Column(db.String(20), nullable=False)
+    address = db.Column(db.String(255), nullable=False)
+    city = db.Column(db.String(100), nullable=False)
+    latitude = db.Column(db.Float, nullable=True)
+    longitude = db.Column(db.Float, nullable=True)
+    is_default = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+class PricingRule(db.Model):
+    __tablename__ = 'pricing_rules'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    origin_hub_id = db.Column(db.Integer, db.ForeignKey('hubs.id'), nullable=True)
+    destination_hub_id = db.Column(db.Integer, db.ForeignKey('hubs.id'), nullable=True)
+    service_type = db.Column(db.String(50), nullable=False, default='Standard')  # 'Standard', 'Express', 'Air', 'Surface'
+    base_weight_kg = db.Column(db.Float, default=1.0)
+    base_rate = db.Column(db.Float, nullable=False, default=100.0)
+    extra_kg_rate = db.Column(db.Float, nullable=False, default=40.0)
+    cod_percentage = db.Column(db.Float, default=0.0)  # COD processing fee %
+    delivery_time_hours = db.Column(db.Integer, default=24)
+    is_active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    origin_hub = db.relationship('Hub', foreign_keys=[origin_hub_id])
+    destination_hub = db.relationship('Hub', foreign_keys=[destination_hub_id])
+
+class DeliverySheet(db.Model):
+    __tablename__ = 'delivery_sheets'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    sheet_number = db.Column(db.String(50), unique=True, nullable=False)
+    hub_id = db.Column(db.Integer, db.ForeignKey('hubs.id'), nullable=False)
+    rider_id = db.Column(db.Integer, db.ForeignKey('drivers.id'), nullable=False)
+    status = db.Column(db.String(30), default='Created')  # 'Created', 'Out For Delivery', 'Completed', 'Cancelled'
+    total_parcels = db.Column(db.Integer, default=0)
+    total_cod_amount = db.Column(db.Float, default=0.0)
+    notes = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    dispatched_at = db.Column(db.DateTime, nullable=True)
+    completed_at = db.Column(db.DateTime, nullable=True)
+    
+    hub = db.relationship('Hub', backref='delivery_sheets')
+    rider = db.relationship('Driver', backref='delivery_sheets')
+    items = db.relationship('DeliverySheetItem', backref='delivery_sheet', cascade="all, delete-orphan")
+
+class DeliverySheetItem(db.Model):
+    __tablename__ = 'delivery_sheet_items'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    delivery_sheet_id = db.Column(db.Integer, db.ForeignKey('delivery_sheets.id'), nullable=False)
+    parcel_id = db.Column(db.Integer, db.ForeignKey('parcels.id'), nullable=False)
+    stop_sequence = db.Column(db.Integer, default=1)
+    status = db.Column(db.String(30), default='Pending')  # 'Pending', 'Delivered', 'Failed Attempt'
+    notes = db.Column(db.String(255), nullable=True)
+    added_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    parcel = db.relationship('Parcel', backref='delivery_sheet_items')
+
+class SupportTicket(db.Model):
+    __tablename__ = 'support_tickets'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    ticket_number = db.Column(db.String(50), unique=True, nullable=False)
+    customer_id = db.Column(db.Integer, db.ForeignKey('customer_profiles.id'), nullable=True)
+    parcel_id = db.Column(db.Integer, db.ForeignKey('parcels.id'), nullable=True)
+    subject = db.Column(db.String(200), nullable=False)
+    category = db.Column(db.String(50), default='Delivery Issue')  # 'Delivery Issue', 'Tracking', 'Billing', 'General'
+    priority = db.Column(db.String(20), default='Medium')  # 'Low', 'Medium', 'High', 'Urgent'
+    status = db.Column(db.String(30), default='Open')  # 'Open', 'In Progress', 'Resolved', 'Closed'
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    parcel = db.relationship('Parcel', backref='support_tickets')
+    replies = db.relationship('TicketReply', backref='ticket', cascade="all, delete-orphan", order_by="TicketReply.created_at.asc()")
+
+class TicketReply(db.Model):
+    __tablename__ = 'ticket_replies'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    ticket_id = db.Column(db.Integer, db.ForeignKey('support_tickets.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    message = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    user = db.relationship('User')
+
+class CompanySetting(db.Model):
+    __tablename__ = 'company_settings'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    company_name = db.Column(db.String(150), default='ParcelFleet Courier Services')
+    phone = db.Column(db.String(50), default='+977-1-4567890')
+    email = db.Column(db.String(100), default='info@parcelfleet.com.np')
+    address = db.Column(db.String(255), default='Patan, Lalitpur, Nepal')
+    vat_pan_number = db.Column(db.String(50), default='601234567')
+    currency = db.Column(db.String(10), default='Rs.')
+    terms_conditions = db.Column(db.Text, nullable=True)
+

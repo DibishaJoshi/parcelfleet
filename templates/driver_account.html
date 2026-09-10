@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+
+{% block title %}Account & Earnings - ParcelFleet Rider{% endblock %}
+{% block page_title %}Rider Account{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-0">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+        <div>
+            <h3 class="fw-bold text-dark mb-1">Rider Financial Account</h3>
+            <p class="text-muted small mb-0">Cash on Delivery (COD) collection balance, daily earnings, and remittance ledger.</p>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-12 col-md-4">
+            <div class="card border-0 shadow-sm rounded-4 p-4 bg-white h-100 border-start border-4 border-primary">
+                <span class="text-muted small text-uppercase fw-bold">COD Cash in Hand</span>
+                <h2 class="fw-bold text-primary mb-1 mt-2">Rs. {{ cod_in_hand | round(2) }}</h2>
+                <small class="text-muted">Total COD collected to remit to branch hub</small>
+            </div>
+        </div>
+        <div class="col-12 col-md-4">
+            <div class="card border-0 shadow-sm rounded-4 p-4 bg-white h-100 border-start border-4 border-success">
+                <span class="text-muted small text-uppercase fw-bold">Estimated Earnings</span>
+                <h2 class="fw-bold text-success mb-1 mt-2">Rs. {{ estimated_earnings | round(2) }}</h2>
+                <small class="text-muted">Delivery commissions accumulated</small>
+            </div>
+        </div>
+        <div class="col-12 col-md-4">
+            <div class="card border-0 shadow-sm rounded-4 p-4 bg-white h-100 border-start border-4 border-info">
+                <span class="text-muted small text-uppercase fw-bold">Delivered Total</span>
+                <h2 class="fw-bold text-dark mb-1 mt-2">{{ driver.completed_deliveries }}</h2>
+                <small class="text-muted">Lifetime completed consignments</small>
+            </div>
+        </div>
+    </div>
+
+    <div class="card border-0 shadow-sm rounded-4 p-4 bg-white">
+        <h5 class="fw-bold text-dark mb-3"><i class="fa-solid fa-receipt text-primary me-2"></i>Recent Cash Collection Ledger</h5>
+        {% if not recent_delivered %}
+        <p class="text-muted small mb-0 text-center py-4">No recent cash transactions recorded.</p>
+        {% else %}
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr style="font-size: 0.75rem; text-transform: uppercase;">
+                        <th>Waybill</th>
+                        <th>Consignee</th>
+                        <th>Delivered Time</th>
+                        <th>Amount Collected</th>
+                        <th>Payment Status</th>
+                    </tr>
+                </thead>
+                <tbody style="font-size: 0.85rem;">
+                    {% for p in recent_delivered %}
+                    <tr>
+                        <td><strong>{{ p.tracking_id }}</strong></td>
+                        <td>{{ p.receiver_name }}</td>
+                        <td>{{ p.delivered_at.strftime('%Y-%m-%d %H:%M') if p.delivered_at else 'Recent' }}</td>
+                        <td class="fw-bold text-success">Rs. {{ p.delivery_charge }}</td>
+                        <td><span class="badge bg-success-subtle text-success rounded-pill">Paid</span></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

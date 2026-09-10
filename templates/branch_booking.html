@@ -1,0 +1,550 @@
+{% extends "base.html" %}
+
+{% block title %}Book Parcel - ParcelFleet{% endblock %}
+{% block page_title %}{% if hub_name %}{{ hub_name }} Hub - Book New Parcel{% else %}Book New Parcel Shipping Order{% endif %}{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-0" style="max-width: 920px; margin: 0 auto;">
+    <!-- HEADER -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+        <div>
+            <h4 class="fw-bold text-dark mb-1"><i class="fas fa-boxes-packing text-primary me-2"></i>Book New Parcel Shipping Order</h4>
+            <p class="text-muted small mb-0">{% if hub_name %}Branch sorting & dispatch station: <strong>{{ hub_name }} Hub</strong>.{% else %}Direct shipment booking with GPS coordinates & dynamic pricing.{% endif %}</p>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+            <a href="{{ url_for('branch_dashboard') }}" class="btn btn-outline-secondary rounded-pill px-3 shadow-sm btn-sm">
+                <i class="fas fa-arrow-left me-1"></i>Branch Dashboard
+            </a>
+            <a href="{{ url_for('manage_parcels') }}" class="btn btn-primary rounded-pill px-3 shadow-sm btn-sm">
+                <i class="fas fa-boxes-stacked me-1"></i>All Shipments
+            </a>
+        </div>
+    </div>
+
+    <!-- MAIN BOOKING CARD -->
+    <div class="card border-0 shadow-sm rounded-4 p-4 p-md-5 bg-white mb-4">
+        <form method="POST" action="{{ url_for('book_parcel') }}" id="bookParcelForm">
+            
+            <!-- Sender Details -->
+            <h6 class="fw-bold text-primary mb-3"><i class="fas fa-user-arrow-up me-2"></i>Sender Details</h6>
+            <div class="row g-3 mb-4">
+                <div class="col-12 col-md-6">
+                    <label for="sender_name" class="form-label fw-semibold">Sender Full Name *</label>
+                    <input type="text" class="form-control" name="sender_name" placeholder="e.g. Dibisha Joshi" required>
+                </div>
+                <div class="col-12 col-md-6">
+                    <label for="sender_phone" class="form-label fw-semibold">Sender Phone Number *</label>
+                    <input type="text" class="form-control" name="sender_phone" placeholder="e.g. 9841XXXXXX" pattern="9[678]\d{8}" title="Must be a 10-digit Nepali mobile number starting with 98, 97, or 96." required>
+                </div>
+            </div>
+
+            <!-- Receiver Details -->
+            <h6 class="fw-bold text-primary mb-3"><i class="fas fa-user-arrow-down me-2"></i>Receiver Details</h6>
+            <div class="row g-3 mb-4">
+                <div class="col-12 col-md-6">
+                    <label for="receiver_name" class="form-label fw-semibold">Receiver Full Name *</label>
+                    <input type="text" class="form-control" name="receiver_name" placeholder="e.g. Ram Sharma" required>
+                </div>
+                <div class="col-12 col-md-6">
+                    <label for="receiver_phone" class="form-label fw-semibold">Receiver Phone Number *</label>
+                    <input type="text" class="form-control" name="receiver_phone" placeholder="e.g. 9801XXXXXX" pattern="9[678]\d{8}" title="Must be a 10-digit Nepali mobile number starting with 98, 97, or 96." required>
+                </div>
+            </div>
+
+            <!-- Route Coordinates Options -->
+            <h6 class="fw-bold text-primary mb-3"><i class="fas fa-map-location-dot me-2"></i>Home Delivery Route Selector</h6>
+            
+            <div class="row g-3 mb-3">
+                <div class="col-12 col-md-6">
+                    <label for="pickup_address" class="form-label fw-semibold">Pickup Address *</label>
+                    <div class="input-group">
+                        <input type="text" class="form-control" name="pickup_address" id="pickup_address" placeholder="e.g. Thamel, Kathmandu" required>
+                        <button type="button" class="btn btn-outline-primary" id="btnSearchPickup"><i class="fas fa-search-location"></i> Find</button>
+                    </div>
+                </div>
+                <div class="col-12 col-md-6">
+                    <label for="delivery_address" class="form-label fw-semibold">Delivery Address *</label>
+                    <div class="input-group">
+                        <input type="text" class="form-control" name="delivery_address" id="delivery_address" placeholder="e.g. New Baneshwor, Kathmandu" required>
+                        <button type="button" class="btn btn-outline-success" id="btnSearchDelivery"><i class="fas fa-search-location"></i> Find</button>
+                    </div>
+                </div>
+            </div>
+            
+            <div id="branchBookMap" style="height: 300px; width: 100%; border-radius: 12px;" class="mb-3 border border-light shadow-sm"></div>
+            
+            <div class="row g-3 mb-4">
+                <div class="col-6 col-md-3">
+                    <label for="pickup_latitude" class="form-label fw-semibold" style="font-size: 0.8rem;">Pickup Lat *</label>
+                    <input type="number" step="0.000001" class="form-control" name="pickup_latitude" id="pickup_latitude" value="27.7154" min="27.50" max="27.90" required>
+                </div>
+                <div class="col-6 col-md-3">
+                    <label for="pickup_longitude" class="form-label fw-semibold" style="font-size: 0.8rem;">Pickup Lng *</label>
+                    <input type="number" step="0.000001" class="form-control" name="pickup_longitude" id="pickup_longitude" value="85.3123" min="85.10" max="85.55" required>
+                </div>
+                <div class="col-6 col-md-3">
+                    <label for="delivery_latitude" class="form-label fw-semibold" style="font-size: 0.8rem;">Delivery Lat *</label>
+                    <input type="number" step="0.000001" class="form-control" name="delivery_latitude" id="delivery_latitude" value="27.6915" min="27.50" max="27.90" required>
+                </div>
+                <div class="col-6 col-md-3">
+                    <label for="delivery_longitude" class="form-label fw-semibold" style="font-size: 0.8rem;">Delivery Lng *</label>
+                    <input type="number" step="0.000001" class="form-control" name="delivery_longitude" id="delivery_longitude" value="85.3331" min="85.10" max="85.55" required>
+                </div>
+            </div>
+
+            <!-- Package Specifications -->
+            <h6 class="fw-bold text-primary mb-3"><i class="fas fa-cube me-2"></i>Package Specifications</h6>
+            <div class="row g-3 mb-3">
+                <div class="col-12 col-md-6">
+                    <label for="parcel_type" class="form-label fw-semibold">Parcel Category *</label>
+                    <select class="form-select" name="parcel_type" id="parcel_type" required>
+                        <option value="Others">Others</option>
+                        <option value="Documents">Documents</option>
+                        <option value="Electronics">Electronics</option>
+                        <option value="Clothing">Clothing</option>
+                        <option value="Food Items">Food Items</option>
+                        <option value="Fragile Goods">Fragile Goods</option>
+                        <option value="Medical Supplies">Medical Supplies</option>
+                    </select>
+                </div>
+                <div class="col-12 col-md-6">
+                    <label for="parcel_weight" class="form-label fw-semibold">Actual Weight (Kg) *</label>
+                    <input type="number" step="0.01" class="form-control" name="weight" id="parcel_weight" placeholder="e.g. 1.5" value="1.0" required>
+                </div>
+            </div>
+            
+            <!-- Parcel Dimensions -->
+            <div class="row g-3 mb-3">
+                <div class="col-4">
+                    <label for="parcel_length" class="form-label fw-semibold">Length (cm) *</label>
+                    <input type="number" step="0.1" class="form-control" name="length" id="parcel_length" value="10.0" required>
+                </div>
+                <div class="col-4">
+                    <label for="parcel_width" class="form-label fw-semibold">Width (cm) *</label>
+                    <input type="number" step="0.1" class="form-control" name="width" id="parcel_width" value="10.0" required>
+                </div>
+                <div class="col-4">
+                    <label for="parcel_height" class="form-label fw-semibold">Height (cm) *</label>
+                    <input type="number" step="0.1" class="form-control" name="height" id="parcel_height" value="10.0" required>
+                </div>
+            </div>
+
+            <!-- Volumetric weight display -->
+            <div class="mb-4 p-3 bg-light border border-light rounded-3 text-muted" style="font-size: 0.85rem;">
+                <i class="fas fa-scale-balanced me-1 text-primary"></i>Chargeable Weight: <span id="chargeable_weight_display" class="fw-bold text-dark">1.00 Kg</span>
+            </div>
+
+            <!-- Special Handling and Payment -->
+            <h6 class="fw-bold text-primary mb-3"><i class="fas fa-hand-holding-dollar me-2"></i>Handling & Billing</h6>
+            <div class="row g-3 mb-3">
+                <div class="col-12 col-md-6">
+                    <label for="payment_status" class="form-label fw-semibold">Payment Status *</label>
+                    <select class="form-select" name="payment_status" required>
+                        <option value="Pending">Pending</option>
+                        <option value="Paid">Paid</option>
+                        <option value="COD">COD (Cash on Delivery)</option>
+                    </select>
+                </div>
+                <div class="col-12 col-md-6">
+                    <label class="form-label fw-semibold">Estimated Charge (Rs.)</label>
+                    <input type="text" class="form-control fw-bold text-dark bg-light" name="delivery_charge" id="estimated_charge" readonly value="145">
+                </div>
+            </div>
+
+            <!-- Special Handling checkboxes -->
+            <div class="mb-4 mt-3">
+                <label class="form-label fw-semibold d-block">Special Handling Badges</label>
+                <div class="d-flex flex-wrap gap-3">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="special_tags" value="Fragile" id="tag_fragile">
+                        <label class="form-check-label" for="tag_fragile">Fragile</label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="special_tags" value="Handle With Care" id="tag_care">
+                        <label class="form-check-label" for="tag_care">Handle With Care</label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="special_tags" value="Express Delivery" id="tag_express">
+                        <label class="form-check-label" for="tag_express">Express Delivery</label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="special_tags" value="Temperature Sensitive" id="tag_temp">
+                        <label class="form-check-label" for="tag_temp">Temperature Sensitive</label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="special_tags" value="Confidential Documents" id="tag_conf">
+                        <label class="form-check-label" for="tag_conf">Confidential Documents</label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SUBMIT BUTTON -->
+            <div class="d-flex justify-content-end gap-3 pt-3 border-top border-light">
+                <a href="{{ url_for('branch_dashboard') }}" class="btn btn-secondary rounded-pill px-4">Cancel</a>
+                <button type="submit" class="btn btn-primary rounded-pill px-5 fw-bold shadow" style="background-color: var(--primary-color); border: none;">
+                    <i class="fas fa-plus me-2"></i>Create Order
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<style>
+    .custom-map-icon {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #FFFFFF;
+        font-size: 1rem;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.15);
+        border: 2px solid #FFFFFF;
+    }
+    .custom-map-icon.pickup { background-color: #F59E0B; }
+    .custom-map-icon.delivery { background-color: #22C55E; }
+</style>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    let bookMap = null;
+    let bookPickupMarker = null;
+    let bookDeliveryMarker = null;
+    
+    // Custom DIV icon builders to match tracking markers
+    const createCustomIcon = (iconClass, colorClass) => {
+        return L.divIcon({
+            html: `<div class="custom-map-icon ${colorClass}"><i class="${iconClass}"></i></div>`,
+            className: 'custom-leaflet-icon',
+            iconSize: [36, 36],
+            iconAnchor: [18, 36]
+        });
+    };
+
+    // Geocoding and Reverse Geocoding helpers with Kathmandu Valley precision
+    const geocodeAddress = (query, marker, mapInstance, latInput, lngInput, addressInput, btnElement) => {
+        if (!query || query.trim().length === 0) {
+            alert("Please enter an address or location name to find.");
+            return;
+        }
+
+        const cleanQ = query.trim();
+        const originalBtnHtml = btnElement ? btnElement.innerHTML : null;
+        if (btnElement) {
+            btnElement.disabled = true;
+            btnElement.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Finding...';
+        }
+
+        const queryList = [
+            cleanQ.toLowerCase().includes('nepal') ? cleanQ : `${cleanQ}, Kathmandu, Nepal`,
+            cleanQ.toLowerCase().includes('kathmandu') ? cleanQ : `${cleanQ}, Kathmandu`,
+            cleanQ
+        ];
+
+        const trySearch = (index) => {
+            if (index >= queryList.length) {
+                if (btnElement) {
+                    btnElement.disabled = false;
+                    btnElement.innerHTML = originalBtnHtml;
+                }
+                alert(`Location "${cleanQ}" not found. Please verify the spelling or manually drag the pin marker on the map.`);
+                return;
+            }
+
+            const currentQuery = queryList[index];
+            const url = `https://nominatim.openstreetmap.org/search?format=json&countrycodes=np&limit=5&q=${encodeURIComponent(currentQuery)}`;
+
+            fetch(url)
+                .then(res => res.json())
+                .then(data => {
+                    if (data && data.length > 0) {
+                        let bestMatch = data.find(item => {
+                            const lat = parseFloat(item.lat);
+                            const lng = parseFloat(item.lon);
+                            return lat >= 27.50 && lat <= 27.90 && lng >= 85.10 && lng <= 85.55;
+                        });
+
+                        if (!bestMatch) {
+                            bestMatch = data[0];
+                        }
+
+                        const lat = parseFloat(bestMatch.lat);
+                        const lng = parseFloat(bestMatch.lon);
+
+                        if (lat >= 27.50 && lat <= 27.90 && lng >= 85.10 && lng <= 85.55) {
+                            marker.setLatLng([lat, lng]);
+                            latInput.value = lat.toFixed(6);
+                            lngInput.value = lng.toFixed(6);
+
+                            const simpleAddr = bestMatch.display_name.split(',').slice(0, 3).join(',').trim();
+                            addressInput.value = simpleAddr;
+
+                            mapInstance.flyTo([lat, lng], 15, { animate: true, duration: 0.8 });
+                            marker.bindPopup(`<b>${simpleAddr}</b><br><small class="text-muted">Lat: ${lat.toFixed(4)}, Lng: ${lng.toFixed(4)}</small>`).openPopup();
+
+                            if (btnElement) {
+                                btnElement.disabled = false;
+                                btnElement.innerHTML = '<i class="fas fa-check text-success me-1"></i>Found';
+                                setTimeout(() => { if (btnElement) btnElement.innerHTML = originalBtnHtml; }, 2000);
+                            }
+                        } else {
+                            if (btnElement) {
+                                btnElement.disabled = false;
+                                btnElement.innerHTML = originalBtnHtml;
+                            }
+                            alert(`Found "${bestMatch.display_name}", but it is outside the active Kathmandu Valley boundaries (Lat: 27.50-27.90, Lng: 85.10-85.55).`);
+                        }
+                    } else {
+                        trySearch(index + 1);
+                    }
+                })
+                .catch(err => {
+                    console.error("Geocoding network error:", err);
+                    trySearch(index + 1);
+                });
+        };
+
+        trySearch(0);
+    };
+
+    const reverseGeocode = (lat, lng, addressInput) => {
+        fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`)
+            .then(res => res.json())
+            .then(data => {
+                if (data && data.display_name) {
+                    const cleanAddr = data.display_name.split(',').slice(0, 3).join(',').trim();
+                    addressInput.value = cleanAddr;
+                }
+            })
+            .catch(err => console.error(err));
+    };
+
+    // Initialize Map directly on page load
+    const mapElement = document.getElementById('branchBookMap');
+    if (mapElement) {
+        bookMap = L.map('branchBookMap').setView([27.7172, 85.3240], 12);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '© OpenStreetMap'
+        }).addTo(bookMap);
+        
+        const pickupIcon = createCustomIcon('fas fa-box', 'pickup');
+        const deliveryIcon = createCustomIcon('fas fa-home', 'delivery');
+        
+        const pLat = parseFloat(document.getElementById('pickup_latitude').value) || 27.7154;
+        const pLng = parseFloat(document.getElementById('pickup_longitude').value) || 85.3123;
+        const dLat = parseFloat(document.getElementById('delivery_latitude').value) || 27.6915;
+        const dLng = parseFloat(document.getElementById('delivery_longitude').value) || 85.3331;
+        
+        bookPickupMarker = L.marker([pLat, pLng], { icon: pickupIcon, draggable: true }).addTo(bookMap).bindPopup("<b>Home Pickup</b> (Drag me)");
+        bookDeliveryMarker = L.marker([dLat, dLng], { icon: deliveryIcon, draggable: true }).addTo(bookMap).bindPopup("<b>Home Delivery</b> (Drag me)");
+        
+        const syncCoords = () => {
+            const pickupPos = bookPickupMarker.getLatLng();
+            const deliveryPos = bookDeliveryMarker.getLatLng();
+            
+            document.getElementById('pickup_latitude').value = pickupPos.lat.toFixed(6);
+            document.getElementById('pickup_longitude').value = pickupPos.lng.toFixed(6);
+            document.getElementById('delivery_latitude').value = deliveryPos.lat.toFixed(6);
+            document.getElementById('delivery_longitude').value = deliveryPos.lng.toFixed(6);
+        };
+        
+        bookPickupMarker.on('drag', syncCoords);
+        bookPickupMarker.on('dragend', function() {
+            syncCoords();
+            reverseGeocode(bookPickupMarker.getLatLng().lat, bookPickupMarker.getLatLng().lng, document.getElementById('pickup_address'));
+        });
+        
+        bookDeliveryMarker.on('drag', syncCoords);
+        bookDeliveryMarker.on('dragend', function() {
+            syncCoords();
+            reverseGeocode(bookDeliveryMarker.getLatLng().lat, bookDeliveryMarker.getLatLng().lng, document.getElementById('delivery_address'));
+        });
+        
+        const group = new L.featureGroup([bookPickupMarker, bookDeliveryMarker]);
+        bookMap.fitBounds(group.getBounds().pad(0.15));
+        
+        const updateMarkerFromInputs = () => {
+            const plat = parseFloat(document.getElementById('pickup_latitude').value) || 27.7154;
+            const plng = parseFloat(document.getElementById('pickup_longitude').value) || 85.3123;
+            const dlat = parseFloat(document.getElementById('delivery_latitude').value) || 27.6915;
+            const dlng = parseFloat(document.getElementById('delivery_longitude').value) || 85.3331;
+            
+            bookPickupMarker.setLatLng([plat, plng]);
+            bookDeliveryMarker.setLatLng([dlat, dlng]);
+        };
+        
+        ['pickup_latitude', 'pickup_longitude', 'delivery_latitude', 'delivery_longitude'].forEach(id => {
+            document.getElementById(id).addEventListener('change', updateMarkerFromInputs);
+        });
+        
+        const btnPickup = document.getElementById('btnSearchPickup');
+        const btnDelivery = document.getElementById('btnSearchDelivery');
+
+        if (btnPickup) {
+            btnPickup.addEventListener('click', function() {
+                geocodeAddress(
+                    document.getElementById('pickup_address').value,
+                    bookPickupMarker,
+                    bookMap,
+                    document.getElementById('pickup_latitude'),
+                    document.getElementById('pickup_longitude'),
+                    document.getElementById('pickup_address'),
+                    this
+                );
+            });
+        }
+
+        if (btnDelivery) {
+            btnDelivery.addEventListener('click', function() {
+                geocodeAddress(
+                    document.getElementById('delivery_address').value,
+                    bookDeliveryMarker,
+                    bookMap,
+                    document.getElementById('delivery_latitude'),
+                    document.getElementById('delivery_longitude'),
+                    document.getElementById('delivery_address'),
+                    this
+                );
+            });
+        }
+
+        const pickupInput = document.getElementById('pickup_address');
+        const deliveryInput = document.getElementById('delivery_address');
+
+        if (pickupInput) {
+            pickupInput.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    btnPickup.click();
+                    return false;
+                }
+            });
+        }
+
+        if (deliveryInput) {
+            deliveryInput.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    btnDelivery.click();
+                    return false;
+                }
+            });
+        }
+    }
+
+    // Dynamic Volumetric and Charge Pricing Calculator
+    const pWeight = document.getElementById('parcel_weight');
+    const pLength = document.getElementById('parcel_length');
+    const pWidth = document.getElementById('parcel_width');
+    const pHeight = document.getElementById('parcel_height');
+    const pType = document.getElementById('parcel_type');
+    const pCharge = document.getElementById('estimated_charge');
+    const pChargeableWeight = document.getElementById('chargeable_weight_display');
+
+    if (pWeight && pLength && pWidth && pHeight && pType) {
+        const calculatePrice = () => {
+            const w = parseFloat(pWeight.value) || 0;
+            const l = parseFloat(pLength.value) || 0;
+            const wd = parseFloat(pWidth.value) || 0;
+            const h = parseFloat(pHeight.value) || 0;
+            const type = pType.value;
+
+            // Compute Volumetric Weight
+            const volWeight = (l * wd * h) / 5000;
+            const chargeableWeight = Math.max(w, volWeight);
+
+            if (pChargeableWeight) {
+                pChargeableWeight.textContent = chargeableWeight.toFixed(2) + ' Kg (Volumetric: ' + volWeight.toFixed(2) + ' Kg)';
+            }
+
+            // Estimate Charge based on category
+            let base = 130;
+            let perKg = 15;
+
+            if (type === 'Documents') { base = 100; perKg = 0; }
+            else if (type === 'Electronics') { base = 200; perKg = 30; }
+            else if (type === 'Clothing') { base = 120; perKg = 15; }
+            else if (type === 'Food Items') { base = 150; perKg = 25; }
+            else if (type === 'Fragile Goods') { base = 250; perKg = 40; }
+            else if (type === 'Medical Supplies') { base = 180; perKg = 20; }
+            else if (type === 'Others') { base = 130; perKg = 15; }
+
+            const total = base + (chargeableWeight > 1 ? (chargeableWeight - 1) * perKg : 0);
+            if (pCharge) {
+                pCharge.value = Math.round(total);
+            }
+        };
+
+        [pWeight, pLength, pWidth, pHeight, pType].forEach(el => {
+            el.addEventListener('input', calculatePrice);
+            el.addEventListener('change', calculatePrice);
+        });
+        calculatePrice();
+    }
+
+    // Validation on form submission
+    const bookForm = document.getElementById('bookParcelForm');
+    if (bookForm) {
+        bookForm.addEventListener('submit', function(e) {
+            const pLat = parseFloat(document.getElementById('pickup_latitude').value);
+            const pLng = parseFloat(document.getElementById('pickup_longitude').value);
+            const dLat = parseFloat(document.getElementById('delivery_latitude').value);
+            const dLng = parseFloat(document.getElementById('delivery_longitude').value);
+            const weight = parseFloat(document.getElementById('parcel_weight').value);
+            const length = parseFloat(document.getElementById('parcel_length').value);
+            const width = parseFloat(document.getElementById('parcel_width').value);
+            const height = parseFloat(document.getElementById('parcel_height').value);
+            const sPhone = document.querySelector('input[name="sender_phone"]').value.trim();
+            const rPhone = document.querySelector('input[name="receiver_phone"]').value.trim();
+            const sName = document.querySelector('input[name="sender_name"]').value.trim();
+            const rName = document.querySelector('input[name="receiver_name"]').value.trim();
+
+            if (!sName || !rName) {
+                e.preventDefault();
+                alert("Validation Error: Sender and Receiver full names are required.");
+                return false;
+            }
+
+            const phoneRegex = /^9[678]\d{8}$/;
+            if (!phoneRegex.test(sPhone)) {
+                e.preventDefault();
+                alert("Validation Error: Sender phone must be a 10-digit Nepali number starting with 98, 97, or 96.");
+                return false;
+            }
+            if (!phoneRegex.test(rPhone)) {
+                e.preventDefault();
+                alert("Validation Error: Receiver phone must be a 10-digit Nepali number starting with 98, 97, or 96.");
+                return false;
+            }
+
+            if (isNaN(pLat) || isNaN(pLng) || pLat < 27.50 || pLat > 27.90 || pLng < 85.10 || pLng > 85.55) {
+                e.preventDefault();
+                alert("Validation Error: Pickup coordinates must reside within Kathmandu Valley boundaries (Lat: 27.50-27.90, Lng: 85.10-85.55).");
+                return false;
+            }
+            if (isNaN(dLat) || isNaN(dLng) || dLat < 27.50 || dLat > 27.90 || dLng < 85.10 || dLng > 85.55) {
+                e.preventDefault();
+                alert("Validation Error: Delivery coordinates must reside within Kathmandu Valley boundaries (Lat: 27.50-27.90, Lng: 85.10-85.55).");
+                return false;
+            }
+
+            if (isNaN(weight) || weight <= 0) {
+                e.preventDefault();
+                alert("Validation Error: Parcel weight must be greater than 0 kg.");
+                return false;
+            }
+            if (isNaN(length) || length <= 0 || isNaN(width) || width <= 0 || isNaN(height) || height <= 0) {
+                e.preventDefault();
+                alert("Validation Error: Package dimensions (Length, Width, Height) must be positive numbers.");
+                return false;
+            }
+        });
+    }
+});
+</script>
+{% endblock %}

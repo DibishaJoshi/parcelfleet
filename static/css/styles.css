@@ -976,3 +976,102 @@ h1, h2, h3, h4, h5, h6 {
     background: linear-gradient(135deg, #6366F1 0%, #4F46E5 100%);
 }
 
+
+
+/* =======================================================
+   DRIVER ROUTE PLANNER & ENLARGED MAP UI
+   ======================================================= */
+.route-tab-pill {
+    background: transparent;
+    border: none;
+    padding: 6px 18px;
+    font-weight: 700;
+    font-size: 0.8rem;
+    color: #64748B;
+    border-radius: 20px;
+    transition: all 0.2s ease-in-out;
+    cursor: pointer;
+    letter-spacing: 0.5px;
+}
+
+.route-tab-pill:hover {
+    color: #1E293B;
+    background: rgba(0, 0, 0, 0.04);
+}
+
+.route-tab-pill.active {
+    background: #EEF2FF;
+    color: #4F46E5;
+}
+
+.driver-map-wrapper {
+    position: relative;
+    width: 100%;
+    background: #E2E8F0;
+}
+
+.floating-sequence-panel {
+    position: absolute;
+    top: 14px;
+    left: 14px;
+    bottom: 14px;
+    width: 380px;
+    max-width: calc(100% - 28px);
+    background: #FFFFFF;
+    z-index: 1000;
+    padding: 14px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12) !important;
+    backdrop-filter: blur(8px);
+}
+
+@media (max-width: 768px) {
+    .floating-sequence-panel {
+        position: relative;
+        top: 0;
+        left: 0;
+        bottom: 0;
+        width: 100%;
+        max-width: 100%;
+        margin-top: 14px;
+        height: 400px;
+    }
+    .driver-map-wrapper {
+        height: 450px !important;
+    }
+}
+
+.sequence-stops-scrollable {
+    scrollbar-width: thin;
+    scrollbar-color: #CBD5E1 transparent;
+}
+
+.sequence-stops-scrollable::-webkit-scrollbar {
+    width: 5px;
+}
+
+.sequence-stops-scrollable::-webkit-scrollbar-thumb {
+    background: #CBD5E1;
+    border-radius: 4px;
+}
+
+.stop-sequence-card {
+    background: #FFFFFF;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.stop-sequence-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08) !important;
+}
+
+.stop-badge-number {
+    background: #3B82F6 !important;
+}
+
+.stop-delivery {
+    background: linear-gradient(135deg, #F59E0B 0%, #D97706 100%) !important;
+}
+
+.stop-pickup {
+    background: linear-gradient(135deg, #10B981 0%, #059669 100%) !important;
+}

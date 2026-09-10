@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+
+{% block title %}My Shipments - Customer Portal{% endblock %}
+{% block page_title %}Shipment Archive & Status History{% endblock %}
+
+{% block content %}
+<div class="card border-0 shadow-sm rounded-4 bg-white p-4">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4 pb-3 border-bottom">
+        <div>
+            <h4 class="fw-bold text-dark mb-1"><i class="fas fa-boxes-stacked text-primary me-2"></i>My Consignment History</h4>
+            <p class="text-muted small mb-0">Total Bookings: {{ parcels | length }} parcels</p>
+        </div>
+        <a href="{{ url_for('customer_book') }}" class="btn btn-primary rounded-pill px-4 fw-bold">
+            <i class="fas fa-plus-circle me-1"></i>New Booking
+        </a>
+    </div>
+
+    {% if not parcels %}
+    <div class="text-center py-5 text-muted">
+        <i class="fas fa-box-open fa-3x mb-3 text-secondary opacity-50"></i>
+        <h5>No shipments recorded yet.</h5>
+    </div>
+    {% else %}
+    <div class="table-responsive">
+        <table class="table table-hover align-middle">
+            <thead class="table-light">
+                <tr class="small text-muted">
+                    <th>Waybill Tracking ID</th>
+                    <th>Booking Date</th>
+                    <th>Receiver</th>
+                    <th>Destination</th>
+                    <th>Service</th>
+                    <th>Status</th>
+                    <th>Delivery Charge</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for p in parcels %}
+                <tr>
+                    <td>
+                        <strong class="text-primary font-monospace">{{ p.tracking_id }}</strong>
+                    </td>
+                    <td><small class="text-muted">{{ p.created_at.strftime('%Y-%m-%d %H:%M') }}</small></td>
+                    <td>
+                        <strong class="text-dark">{{ p.receiver_name }}</strong>
+                        <small class="d-block text-muted">{{ p.receiver_phone }}</small>
+                    </td>
+                    <td><small class="text-dark">{{ p.delivery_address }} ({{ p.delivery_hub }})</small></td>
+                    <td><span class="badge bg-light text-dark border">{{ p.service_type }}</span></td>
+                    <td>
+                        <span class="badge bg-{% if p.status == 'Delivered' %}success{% elif p.status == 'Out For Delivery' %}primary{% elif p.status == 'In Transit' %}info{% else %}secondary{% endif %}-subtle text-{% if p.status == 'Delivered' %}success{% elif p.status == 'Out For Delivery' %}primary{% elif p.status == 'In Transit' %}info{% else %}secondary{% endif %} rounded-pill px-2 py-1">
+                            {{ p.status }}
+                        </span>
+                    </td>
+                    <td>
+                        <strong>Rs. {{ p.delivery_charge }}</strong>
+                        <small class="d-block text-muted">{{ p.payment_status }}</small>
+                    </td>
+                    <td>
+                        <div class="btn-group btn-group-sm">
+                            <a href="{{ url_for('customer_tracking_view', tracking_id=p.tracking_id) }}" class="btn btn-outline-primary rounded-pill px-2" title="Track Live">
+                                <i class="fas fa-location-crosshairs"></i> Track
+                            </a>
+                            <a href="{{ url_for('print_shipping_label', id=p.id) }}" target="_blank" class="btn btn-outline-secondary rounded-pill px-2 ms-1" title="Print Label">
+                                <i class="fas fa-print"></i> Label
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

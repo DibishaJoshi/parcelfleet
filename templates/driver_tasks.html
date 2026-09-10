@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+
+{% block title %}My Tasks - ParcelFleet Rider{% endblock %}
+{% block page_title %}My Tasks{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-0">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+        <div>
+            <h3 class="fw-bold text-dark mb-1">My Assigned Tasks</h3>
+            <p class="text-muted small mb-0">All active pickups and delivery runsheets currently assigned to your route.</p>
+        </div>
+        <a href="{{ url_for('driver_route_planner') }}" class="btn btn-primary rounded-pill px-4 shadow-sm">
+            <i class="fa-solid fa-map-location-dot me-1"></i>Route Planner Navigation
+        </a>
+    </div>
+
+    {% if not tasks %}
+    <div class="card border-0 shadow-sm rounded-4 p-5 text-center bg-white">
+        <i class="fa-solid fa-circle-check text-success fa-3x mb-3"></i>
+        <h5 class="fw-bold text-dark">No Active Tasks!</h5>
+        <p class="text-muted small mb-0">You have no pending deliveries or pickups.</p>
+    </div>
+    {% else %}
+    <div class="card border-0 shadow-sm rounded-4 p-4 bg-white">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr style="font-size: 0.75rem; text-transform: uppercase;">
+                        <th>Stop #</th>
+                        <th>Tracking ID</th>
+                        <th>Type</th>
+                        <th>Contact / Recipient</th>
+                        <th>Delivery Address</th>
+                        <th>Charge / COD</th>
+                        <th>Status</th>
+                        <th class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody style="font-size: 0.85rem;">
+                    {% for p in tasks %}
+                    <tr>
+                        <td><span class="badge bg-primary rounded-circle" style="width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center;">{{ loop.index }}</span></td>
+                        <td><strong class="text-primary">{{ p.tracking_id }}</strong></td>
+                        <td>
+                            <span class="badge rounded-pill {% if p.status == 'Assigned' %}bg-success-subtle text-success{% else %}bg-warning-subtle text-warning-emphasis{% endif %}">
+                                {% if p.status == 'Assigned' %}PICKUP{% else %}DELIVERY{% endif %}
+                            </span>
+                        </td>
+                        <td>
+                            <div class="fw-bold text-dark">{{ p.receiver_name if p.status != 'Assigned' else p.sender_name }}</div>
+                            <small class="text-muted">{{ p.receiver_phone if p.status != 'Assigned' else p.sender_phone }}</small>
+                        </td>
+                        <td>
+                            <span class="text-muted small"><i class="fa-solid fa-location-dot text-danger me-1"></i>{{ p.delivery_address if p.status != 'Assigned' else p.pickup_address }}</span>
+                        </td>
+                        <td>
+                            <span class="fw-semibold">Rs. {{ p.cod_amount or p.delivery_charge }}</span>
+                        </td>
+                        <td>
+                            <span class="badge bg-secondary-subtle text-dark rounded-pill">{{ p.status }}</span>
+                        </td>
+                        <td class="text-end">
+                            <a href="tel:{{ p.receiver_phone if p.status != 'Assigned' else p.sender_phone }}" class="btn btn-xs btn-outline-secondary rounded-pill px-2 py-1">
+                                <i class="fa-solid fa-phone"></i>
+                            </a>
+                            <a href="{{ url_for('driver_route_planner') }}" class="btn btn-xs btn-primary rounded-pill px-3 py-1 ms-1">
+                                Navigate
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

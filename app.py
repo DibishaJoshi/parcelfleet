@@ -18,7 +18,9 @@ from barcode.writer import ImageWriter
 # Models and Database
 from models import (
     db, User, Driver, Parcel, TrackingHistory, NotificationLog, Hub, HubAdmin,
-    Vehicle, VehicleMaintenance, Assignment, Manifest, ManifestItem, Merchandise
+    Vehicle, VehicleMaintenance, Assignment, Manifest, ManifestItem, Merchandise,
+    CustomerProfile, CustomerAddress, PricingRule, DeliverySheet, DeliverySheetItem,
+    SupportTicket, TicketReply, CompanySetting
 )
 
 # Algorithms
@@ -67,7 +69,7 @@ def load_user(user_id):
 def get_current_hub_name():
     if not current_user.is_authenticated:
         return None
-    if current_user.role == 'hub_admin':
+    if current_user.role in ['hub_admin', 'branch_manager', 'booking_staff', 'warehouse_staff', 'dispatcher', 'branch_staff']:
         profile = HubAdmin.query.filter_by(user_id=current_user.id).first()
         if profile and profile.hub:
             return profile.hub.name
@@ -76,22 +78,30 @@ def get_current_hub_name():
 def get_current_hub_id():
     if not current_user.is_authenticated:
         return None
-    if current_user.role in ['hub_admin', 'booking_staff', 'warehouse_staff', 'dispatcher', 'delivery_staff', 'branch_staff']:
+    if current_user.role in ['hub_admin', 'branch_manager', 'booking_staff', 'warehouse_staff', 'dispatcher', 'delivery_staff', 'branch_staff']:
         profile = HubAdmin.query.filter_by(user_id=current_user.id).first()
         if profile:
             return profile.hub_id
     return None
 
-# --- AUTHENTICATION ROUTES ---
+# --- AUTHENTICATION & PORTAL LANDING ROUTES ---
 
 @app.route('/')
 def index():
     if current_user.is_authenticated:
-        if current_user.role in ['admin', 'hub_admin', 'booking_staff', 'warehouse_staff', 'dispatcher', 'delivery_staff', 'branch_staff']:
+        if current_user.role == 'admin':
             return redirect(url_for('admin_dashboard'))
+        elif current_user.role in ['hub_admin', 'branch_manager', 'booking_staff', 'warehouse_staff', 'dispatcher', 'branch_staff']:
+            return redirect(url_for('branch_dashboard'))
+        elif current_user.role == 'customer':
+            return redirect(url_for('customer_dashboard'))
         elif current_user.role == 'driver':
             return redirect(url_for('driver_dashboard'))
-    return redirect(url_for('login'))
+    
+    # Public portal home
+    hubs = Hub.query.all()
+    company = CompanySetting.query.first()
+    return render_template('public_home.html', hubs=hubs, company=company, no_layout=True)
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -110,12 +120,93 @@ def login():
             return redirect(url_for('login'))
             
         login_user(user, remember=remember)
-        if user.role in ['admin', 'hub_admin', 'booking_staff', 'warehouse_staff', 'dispatcher', 'delivery_staff', 'branch_staff']:
+        if user.role == 'admin':
             return redirect(url_for('admin_dashboard'))
+        elif user.role in ['hub_admin', 'branch_manager', 'booking_staff', 'warehouse_staff', 'dispatcher', 'branch_staff']:
+            return redirect(url_for('branch_dashboard'))
+        elif user.role == 'customer':
+            return redirect(url_for('customer_dashboard'))
         elif user.role == 'driver':
             return redirect(url_for('driver_dashboard'))
             
     return render_template('login.html', no_layout=True)
+
+@app.route('/customer/register', methods=['GET', 'POST'])
+def customer_register():
+    if current_user.is_authenticated:
+        return redirect(url_for('index'))
+        
+    if request.method == 'POST':
+        username = request.form.get('username', '').strip()
+        password = request.form.get('password')
+        confirm_password = request.form.get('confirm_password')
+        contact_person = request.form.get('contact_person', '').strip()
+        company_name = request.form.get('company_name', '').strip()
+        phone = request.form.get('phone', '').strip()
+        email = request.form.get('email', '').strip()
+        address = request.form.get('address', '').strip()
+        city = request.form.get('city', 'Kathmandu').strip()
+        account_type = request.form.get('account_type', 'individual')
+        
+        if not username or not password or not contact_person or not phone:
+            flash("Username, password, contact name, and phone are required.", "error")
+            return redirect(url_for('customer_register'))
+            
+        if password != confirm_password:
+            flash("Passwords do not match.", "error")
+            return redirect(url_for('customer_register'))
+            
+        if not validate_phone(phone):
+            flash("Invalid phone number format.", "error")
+            return redirect(url_for('customer_register'))
+            
+        existing_user = User.query.filter_by(username=username).first()
+        if existing_user:
+            flash(f"Username '{username}' is already taken.", "error")
+            return redirect(url_for('customer_register'))
+            
+        user = User(
+            username=username,
+            password_hash=generate_password_hash(password),
+            role='customer',
+            permissions='view,create,reports'
+        )
+        db.session.add(user)
+        db.session.commit()
+        
+        profile = CustomerProfile(
+            user_id=user.id,
+            company_name=company_name or None,
+            contact_person=contact_person,
+            phone=phone,
+            email=email or None,
+            address=address or None,
+            city=city,
+            account_type=account_type,
+            credit_limit=10000.0 if account_type == 'business' else 0.0,
+            balance=0.0
+        )
+        db.session.add(profile)
+        db.session.flush()
+        
+        if address:
+            cust_addr = CustomerAddress(
+                customer_id=profile.id,
+                label='Default Pickup',
+                recipient_name=contact_person,
+                phone=phone,
+                address=address,
+                city=city,
+                is_default=True
+            )
+            db.session.add(cust_addr)
+            
+        db.session.commit()
+        login_user(user)
+        flash("Welcome to ParcelFleet! Your customer portal account is ready.", "success")
+        return redirect(url_for('customer_dashboard'))
+        
+    return render_template('customer_register.html', no_layout=True)
 
 @app.route('/forgot-password', methods=['GET', 'POST'])
 def forgot_password():
@@ -1260,7 +1351,7 @@ def edit_parcel(id):
 @app.route('/admin/assign-driver-manual/<int:id>', methods=['POST'])
 @login_required
 def assign_driver_manual(id):
-    if current_user.role not in ['admin', 'hub_admin', 'dispatcher']:
+    if current_user.role not in ['admin', 'hub_admin', 'dispatcher', 'booking_staff', 'branch_manager']:
         return redirect(url_for('index'))
         
     parcel = Parcel.query.get_or_404(id)
@@ -1269,67 +1360,119 @@ def assign_driver_manual(id):
     if driver_id:
         driver = Driver.query.get(int(driver_id))
         if driver:
-            # Business rule validation: Weight limits and vehicle type allocation
-            if parcel.weight > 5.0:
-                flash("Validation Error: Parcels heavier than 5 kg must be grouped as a manifest and delivered using a truck or van.", "error")
-                return redirect(url_for('parcel_details', id=parcel.id))
-                
-            if not driver.assigned_vehicle or driver.assigned_vehicle.vehicle_type != 'Bike':
-                flash("Validation Error: Small parcels (<= 5 kg) must be delivered by a bike driver.", "error")
-                return redirect(url_for('parcel_details', id=parcel.id))
+            # Capacity validation based on vehicle limits
+            vehicle = driver.assigned_vehicle
+            cap_w = float(vehicle.capacity_weight if vehicle else 30.0)
+            cap_v = float(vehicle.capacity_volume if vehicle else 0.2)
+            
+            # Calculate driver current load
+            driver_parcels = driver.parcels or []
+            current_weight = sum([p.weight for p in driver_parcels if p.status not in ['Delivered', 'Cancelled'] and p.id != parcel.id])
+            parcel_vol = (parcel.length * parcel.width * parcel.height) / 1000000.0 if (parcel.length and parcel.width and parcel.height) else 0.005
+            
+            if current_weight + parcel.weight > cap_w + 1e-6:
+                flash(f"Capacity Warning: Driver {driver.name}'s vehicle ({vehicle.vehicle_type if vehicle else 'Bike'}) has limit of {cap_w} kg (Current Load: {round(current_weight, 1)} kg). Parcel weight is {parcel.weight} kg.", "error")
+                return redirect(request.referrer or url_for('manage_parcels'))
                 
             parcel.assigned_driver_id = driver.id
             parcel.status = 'Assigned'
             driver.availability = 'On Delivery'
             
             hist = TrackingHistory(parcel_id=parcel.id, status='Assigned', location=parcel.pickup_address)
-            notif = NotificationLog(parcel_id=parcel.id, message=f"Driver {driver.name} assigned.", type='Assigned')
+            notif = NotificationLog(parcel_id=parcel.id, message=f"Driver {driver.name} assigned based on location proximity & vehicle capacity.", type='Assigned')
             db.session.add(hist)
             db.session.add(notif)
             db.session.commit()
             
-            flash(f"Driver {driver.name} assigned to order {parcel.tracking_id}!", "success")
+            flash(f"Driver {driver.name} ({vehicle.vehicle_type if vehicle else 'Bike'}) assigned to {parcel.tracking_id} successfully!", "success")
             
-    return redirect(url_for('parcel_details', id=parcel.id))
+    return redirect(request.referrer or url_for('manage_parcels'))
+
+@app.route('/admin/auto-assign-parcel/<int:id>', methods=['POST'])
+@login_required
+def auto_assign_single_parcel(id):
+    if current_user.role not in ['admin', 'hub_admin', 'dispatcher', 'booking_staff', 'branch_manager']:
+        return redirect(url_for('index'))
+        
+    parcel = Parcel.query.get_or_404(id)
+    available_drivers = Driver.query.filter(Driver.availability.in_(['Available', 'On Delivery'])).all()
+    
+    if not available_drivers:
+        flash("No active drivers available in the fleet.", "warning")
+        return redirect(request.referrer or url_for('manage_parcels'))
+        
+    driver, distance = greedy_driver_assignment(parcel, available_drivers)
+    if not driver:
+        flash(f"No driver found with sufficient vehicle capacity for parcel {parcel.tracking_id} ({parcel.weight} kg).", "error")
+        return redirect(request.referrer or url_for('manage_parcels'))
+        
+    parcel.assigned_driver_id = driver.id
+    parcel.status = 'Assigned'
+    driver.availability = 'On Delivery'
+    
+    hist = TrackingHistory(parcel_id=parcel.id, status='Assigned', location=parcel.pickup_address)
+    notif = NotificationLog(parcel_id=parcel.id, message=f"Auto-assigned to {driver.name} ({round(distance, 1)} km away) based on location & capacity.", type='Assigned')
+    db.session.add(hist)
+    db.session.add(notif)
+    db.session.commit()
+    
+    flash(f"Parcel {parcel.tracking_id} auto-assigned to {driver.name} ({round(distance, 1)} km away, Vehicle: {driver.assigned_vehicle.vehicle_type if driver.assigned_vehicle else 'Bike'})!", "success")
+    return redirect(request.referrer or url_for('manage_parcels'))
 
 @app.route('/admin/run-fcfs-dispatch', methods=['POST'])
+@app.route('/admin/auto-assign-all', methods=['POST'])
 @login_required
 def run_fcfs_dispatch():
-    if current_user.role not in ['admin', 'hub_admin', 'dispatcher']:
+    if current_user.role not in ['admin', 'hub_admin', 'dispatcher', 'booking_staff', 'branch_manager']:
         return redirect(url_for('index'))
         
     hub_name = get_current_hub_name()
     if hub_name:
-        pending_parcels = Parcel.query.filter_by(status='Pending').filter(Parcel.weight <= 5.0).filter((Parcel.pickup_hub == hub_name) | (Parcel.delivery_hub == hub_name)).order_by(Parcel.created_at.asc()).all()
+        pending_parcels = Parcel.query.filter_by(status='Pending').filter((Parcel.pickup_hub == hub_name) | (Parcel.delivery_hub == hub_name)).order_by(Parcel.created_at.asc()).all()
     else:
-        pending_parcels = Parcel.query.filter_by(status='Pending').filter(Parcel.weight <= 5.0).order_by(Parcel.created_at.asc()).all()
+        pending_parcels = Parcel.query.filter_by(status='Pending').order_by(Parcel.created_at.asc()).all()
         
     if not pending_parcels:
         flash("No pending parcel orders found in queue.", "info")
-        return redirect(url_for('admin_dashboard'))
+        return redirect(request.referrer or url_for('admin_dashboard'))
         
-    dispatched_count = 0
-    for parcel in pending_parcels:
-        available_drivers = Driver.query.filter_by(availability='Available').all()
-        if not available_drivers:
-            flash(f"Dispatch queue halted: No available drivers. Dispatched {dispatched_count} orders.", "warning")
-            return redirect(url_for('admin_dashboard'))
+    available_drivers = Driver.query.filter(Driver.availability.in_(['Available', 'On Delivery'])).all()
+    if not available_drivers:
+        flash("No available drivers found in fleet.", "warning")
+        return redirect(request.referrer or url_for('admin_dashboard'))
+        
+    # Run multi-courier capacity & location optimization
+    optimization_result = multi_courier_optimization(available_drivers, pending_parcels)
+    
+    assigned_count = 0
+    for route in optimization_result['courier_routes']:
+        driver = Driver.query.get(route['courier_id'])
+        if not driver:
+            continue
             
-        driver, distance = greedy_driver_assignment(parcel, available_drivers)
-        if driver:
-            parcel.assigned_driver_id = driver.id
-            parcel.status = 'Assigned'
-            driver.availability = 'On Delivery'
-            
-            hist = TrackingHistory(parcel_id=parcel.id, status='Assigned', location=parcel.pickup_address)
-            notif = NotificationLog(parcel_id=parcel.id, message=f"Auto-Dispatched: Courier {driver.name} matched.", type='Assigned')
-            db.session.add(hist)
-            db.session.add(notif)
-            db.session.commit()
-            dispatched_count += 1
-            
-    flash(f"FCFS Auto-dispatch complete! Assigned {dispatched_count} orders.", "success")
-    return redirect(url_for('admin_dashboard'))
+        driver.availability = 'On Delivery'
+        for stop in route['ordered_stops']:
+            parcel = Parcel.query.get(stop['parcel_id'])
+            if parcel and parcel.status == 'Pending':
+                parcel.assigned_driver_id = driver.id
+                parcel.status = 'Assigned'
+                
+                hist = TrackingHistory(parcel_id=parcel.id, status='Assigned', location=parcel.pickup_address)
+                notif = NotificationLog(parcel_id=parcel.id, message=f"Auto-assigned to {driver.name} (Stop #{stop['stop_number']}).", type='Assigned')
+                db.session.add(hist)
+                db.session.add(notif)
+                assigned_count += 1
+                
+    db.session.commit()
+    
+    unassigned_count = len(optimization_result['unassigned_deliveries'])
+    if unassigned_count > 0:
+        flash(f"Auto-dispatch complete: Assigned {assigned_count} parcels. {unassigned_count} parcels remain unassigned due to vehicle capacity limits.", "warning")
+    else:
+        flash(f"Auto-dispatch complete! Successfully assigned all {assigned_count} parcels to optimal drivers based on location & vehicle capacity.", "success")
+        
+    return redirect(request.referrer or url_for('admin_dashboard'))
+
 
 # --- MULTI-COURIER DELIVERY OPTIMIZATION MODULE ---
 
@@ -1862,8 +2005,11 @@ def driver_dashboard():
         
     driver = Driver.query.filter_by(user_id=current_user.id).first_or_404()
     active_deliveries = Parcel.query.filter_by(assigned_driver_id=driver.id).filter(Parcel.status.notin_(['Delivered', 'Cancelled'])).order_by(Parcel.created_at.desc()).all()
-    history_deliveries = Parcel.query.filter_by(assigned_driver_id=driver.id).filter(Parcel.status.in_(['Delivered', 'Cancelled'])).order_by(Parcel.created_at.desc()).all()
-    drivers = Driver.query.all()
+    history_deliveries = Parcel.query.filter_by(assigned_driver_id=driver.id).filter(Parcel.status.in_(['Delivered', 'Cancelled'])).order_by(Parcel.delivered_at.desc()).all()
+    
+    pickups_count = len([p for p in active_deliveries if p.status == 'Assigned'])
+    deliveries_count = len([p for p in active_deliveries if p.status != 'Assigned'])
+    total_cod = sum([p.cod_amount or p.delivery_charge for p in active_deliveries])
     
     return render_template(
         'driver_dashboard.html', 
@@ -1871,7 +2017,116 @@ def driver_dashboard():
         driver=driver, 
         active_deliveries=active_deliveries, 
         history_deliveries=history_deliveries, 
-        drivers=drivers
+        pickups_count=pickups_count,
+        deliveries_count=deliveries_count,
+        total_cod=total_cod
+    )
+
+@app.route('/driver/pickups')
+@login_required
+def driver_pickups():
+    if current_user.role != 'driver':
+        return redirect(url_for('index'))
+        
+    driver = Driver.query.filter_by(user_id=current_user.id).first_or_404()
+    pickups = Parcel.query.filter_by(assigned_driver_id=driver.id, status='Assigned').order_by(Parcel.created_at.asc()).all()
+    
+    return render_template(
+        'driver_pickups.html',
+        active_page='driver_pickups',
+        driver=driver,
+        pickups=pickups
+    )
+
+@app.route('/driver/tasks')
+@login_required
+def driver_tasks():
+    if current_user.role != 'driver':
+        return redirect(url_for('index'))
+        
+    driver = Driver.query.filter_by(user_id=current_user.id).first_or_404()
+    tasks = Parcel.query.filter_by(assigned_driver_id=driver.id).filter(Parcel.status.notin_(['Delivered', 'Cancelled'])).order_by(Parcel.created_at.asc()).all()
+    
+    return render_template(
+        'driver_tasks.html',
+        active_page='driver_tasks',
+        driver=driver,
+        tasks=tasks
+    )
+
+@app.route('/driver/route-planner')
+@login_required
+def driver_route_planner():
+    if current_user.role != 'driver':
+        return redirect(url_for('index'))
+        
+    driver = Driver.query.filter_by(user_id=current_user.id).first_or_404()
+    active_deliveries = Parcel.query.filter_by(assigned_driver_id=driver.id).filter(Parcel.status.notin_(['Delivered', 'Cancelled'])).order_by(Parcel.created_at.asc()).all()
+    
+    return render_template(
+        'driver_route_planner.html',
+        active_page='driver_route_planner',
+        driver=driver,
+        active_deliveries=active_deliveries
+    )
+
+@app.route('/driver/history')
+@login_required
+def driver_history():
+    if current_user.role != 'driver':
+        return redirect(url_for('index'))
+        
+    driver = Driver.query.filter_by(user_id=current_user.id).first_or_404()
+    history_deliveries = Parcel.query.filter_by(assigned_driver_id=driver.id).filter(Parcel.status.in_(['Delivered', 'Cancelled'])).order_by(Parcel.delivered_at.desc()).all()
+    
+    return render_template(
+        'driver_history.html',
+        active_page='driver_history',
+        driver=driver,
+        history_deliveries=history_deliveries
+    )
+
+@app.route('/driver/account')
+@login_required
+def driver_account():
+    if current_user.role != 'driver':
+        return redirect(url_for('index'))
+        
+    driver = Driver.query.filter_by(user_id=current_user.id).first_or_404()
+    recent_delivered = Parcel.query.filter_by(assigned_driver_id=driver.id, status='Delivered').order_by(Parcel.delivered_at.desc()).limit(15).all()
+    
+    cod_in_hand = sum([p.delivery_charge for p in recent_delivered])
+    estimated_earnings = driver.completed_deliveries * 35.0  # Commission per delivery
+    
+    return render_template(
+        'driver_account.html',
+        active_page='driver_account',
+        driver=driver,
+        recent_delivered=recent_delivered,
+        cod_in_hand=cod_in_hand,
+        estimated_earnings=estimated_earnings
+    )
+
+@app.route('/driver/profile', methods=['GET', 'POST'])
+@login_required
+def driver_profile():
+    if current_user.role != 'driver':
+        return redirect(url_for('index'))
+        
+    driver = Driver.query.filter_by(user_id=current_user.id).first_or_404()
+    
+    if request.method == 'POST':
+        driver.name = request.form.get('name', driver.name)
+        driver.phone = request.form.get('phone', driver.phone)
+        driver.email = request.form.get('email', driver.email)
+        db.session.commit()
+        flash("Rider profile details updated successfully!", "success")
+        return redirect(url_for('driver_profile'))
+        
+    return render_template(
+        'driver_profile.html',
+        active_page='driver_profile',
+        driver=driver
     )
 
 @app.route('/driver/update-status/<int:id>', methods=['POST'])
@@ -1935,7 +2190,7 @@ def update_parcel_status_driver(id):
         
     db.session.commit()
     flash(f"Shipment {parcel.tracking_id} updated to {status}!", "success")
-    return redirect(url_for('driver_dashboard'))
+    return redirect(request.referrer or url_for('driver_dashboard'))
 
 # --- PUBLIC & PRINT HELPER ROUTES ---
 
@@ -2505,5 +2760,752 @@ def api_driver_active_route():
         'legs': legs
     })
 
+# ==========================================
+# --- 5-PORTAL SYSTEM ENDPOINTS & LOGIC ---
+# ==========================================
+
+# 1. PUBLIC PORTAL APIs
+# ---------------------
+
+@app.route('/api/public/rate-calculate', methods=['POST'])
+def api_public_rate_calculate():
+    data = request.get_json() or {}
+    origin_hub_name = data.get('origin_hub')
+    dest_hub_name = data.get('destination_hub')
+    service_type = data.get('service_type', 'Standard')
+    
+    try:
+        weight = float(data.get('weight', 1.0))
+    except (TypeError, ValueError):
+        weight = 1.0
+        
+    origin_hub = Hub.query.filter_by(name=origin_hub_name).first() if origin_hub_name else None
+    dest_hub = Hub.query.filter_by(name=dest_hub_name).first() if dest_hub_name else None
+    
+    rule = None
+    if origin_hub and dest_hub:
+        rule = PricingRule.query.filter_by(
+            origin_hub_id=origin_hub.id,
+            destination_hub_id=dest_hub.id,
+            service_type=service_type,
+            is_active=True
+        ).first()
+        
+    if not rule:
+        rule = PricingRule.query.filter_by(service_type=service_type, is_active=True).first()
+        
+    base_rate = rule.base_rate if rule else (180.0 if service_type == 'Express' else 120.0)
+    extra_kg_rate = rule.extra_kg_rate if rule else 40.0
+    base_weight = rule.base_weight_kg if rule else 1.0
+    est_hours = rule.delivery_time_hours if rule else (12 if service_type == 'Express' else 24)
+    
+    extra_weight = max(0.0, weight - base_weight)
+    total_charge = base_rate + (extra_weight * extra_kg_rate)
+    
+    distance_km = 4.5
+    if origin_hub and dest_hub and origin_hub.name != dest_hub.name:
+        _, distance_km = dijkstra(origin_hub.name, dest_hub.name)
+        
+    return jsonify({
+        'success': True,
+        'total_charge': round(total_charge, 2),
+        'base_rate': base_rate,
+        'extra_kg_rate': extra_kg_rate,
+        'weight': weight,
+        'service_type': service_type,
+        'delivery_time_hours': est_hours,
+        'distance_km': round(distance_km, 2)
+    })
+
+@app.route('/api/public/branches')
+def api_public_branches():
+    hubs = Hub.query.all()
+    data = [{
+        'id': h.id,
+        'name': h.name,
+        'latitude': h.latitude,
+        'longitude': h.longitude,
+        'total_riders': len(h.drivers),
+        'active_parcels': len(h.parcels)
+    } for h in hubs]
+    return jsonify(data)
+
+# 2. CUSTOMER PORTAL
+# ------------------
+
+@app.route('/customer/dashboard')
+@login_required
+def customer_dashboard():
+    if current_user.role != 'customer':
+        return redirect(url_for('index'))
+        
+    profile = CustomerProfile.query.filter_by(user_id=current_user.id).first()
+    if not profile:
+        profile = CustomerProfile(
+            user_id=current_user.id,
+            contact_person=current_user.username,
+            phone="9800000000"
+        )
+        db.session.add(profile)
+        db.session.commit()
+        
+    parcels = Parcel.query.filter_by(customer_id=profile.id).order_by(Parcel.created_at.desc()).all()
+    
+    total_bookings = len(parcels)
+    in_transit = sum(1 for p in parcels if p.status in ['Assigned', 'Picked Up', 'In Transit', 'Out For Delivery'])
+    delivered = sum(1 for p in parcels if p.status == 'Delivered')
+    total_spent = sum(p.delivery_charge for p in parcels if p.payment_status == 'Paid')
+    
+    support_tickets = SupportTicket.query.filter_by(customer_id=profile.id).order_by(SupportTicket.created_at.desc()).limit(5).all()
+    
+    return render_template(
+        'customer_dashboard.html',
+        active_page='customer_dashboard',
+        profile=profile,
+        parcels=parcels[:8],
+        all_parcels=parcels,
+        total_bookings=total_bookings,
+        in_transit=in_transit,
+        delivered=delivered,
+        total_spent=round(total_spent, 2),
+        support_tickets=support_tickets
+    )
+
+@app.route('/customer/book', methods=['GET', 'POST'])
+@login_required
+def customer_book():
+    if current_user.role != 'customer':
+        return redirect(url_for('index'))
+        
+    profile = CustomerProfile.query.filter_by(user_id=current_user.id).first_or_404()
+    hubs = Hub.query.all()
+    saved_addresses = CustomerAddress.query.filter_by(customer_id=profile.id).all()
+    merchandise_types = Merchandise.query.all()
+    
+    if request.method == 'POST':
+        sender_name = request.form.get('sender_name', '').strip()
+        sender_phone = request.form.get('sender_phone', '').strip()
+        receiver_name = request.form.get('receiver_name', '').strip()
+        receiver_phone = request.form.get('receiver_phone', '').strip()
+        pickup_address = request.form.get('pickup_address', '').strip()
+        delivery_address = request.form.get('delivery_address', '').strip()
+        pickup_hub = request.form.get('pickup_hub')
+        delivery_hub = request.form.get('delivery_hub')
+        parcel_type = request.form.get('parcel_type', 'Standard Parcel')
+        service_type = request.form.get('service_type', 'Standard')
+        weight = float(request.form.get('weight', 1.0))
+        length = float(request.form.get('length', 10.0))
+        width = float(request.form.get('width', 10.0))
+        height = float(request.form.get('height', 10.0))
+        payment_status = request.form.get('payment_status', 'Pending')
+        cod_amount = float(request.form.get('cod_amount', 0.0)) if payment_status == 'COD' else 0.0
+        
+        pickup_lat = float(request.form.get('pickup_latitude', 27.7154))
+        pickup_lng = float(request.form.get('pickup_longitude', 85.3123))
+        delivery_lat = float(request.form.get('delivery_latitude', 27.6915))
+        delivery_lng = float(request.form.get('delivery_longitude', 85.3331))
+        
+        if not sender_name or not sender_phone or not receiver_name or not receiver_phone:
+            flash("Sender and Receiver contact details are mandatory.", "error")
+            return redirect(url_for('customer_book'))
+            
+        # Calculate delivery charge from pricing rules
+        p_hub_obj = Hub.query.filter_by(name=pickup_hub).first()
+        d_hub_obj = Hub.query.filter_by(name=delivery_hub).first()
+        rule = PricingRule.query.filter_by(
+            origin_hub_id=p_hub_obj.id if p_hub_obj else None,
+            destination_hub_id=d_hub_obj.id if d_hub_obj else None,
+            service_type=service_type,
+            is_active=True
+        ).first() if p_hub_obj and d_hub_obj else None
+        
+        if not rule:
+            rule = PricingRule.query.filter_by(service_type=service_type, is_active=True).first()
+            
+        base_rate = rule.base_rate if rule else (180.0 if service_type == 'Express' else 120.0)
+        extra_kg_rate = rule.extra_kg_rate if rule else 40.0
+        extra_weight = max(0.0, weight - (rule.base_weight_kg if rule else 1.0))
+        delivery_charge = round(base_rate + (extra_weight * extra_kg_rate), 2)
+        
+        # Generate Waybill Tracking ID
+        tracking_id = f"AWB{datetime.utcnow().strftime('%y%m%d')}{random.randint(1000, 9999)}"
+        
+        parcel = Parcel(
+            tracking_id=tracking_id,
+            customer_id=profile.id,
+            sender_name=sender_name,
+            sender_phone=sender_phone,
+            receiver_name=receiver_name,
+            receiver_phone=receiver_phone,
+            pickup_address=pickup_address,
+            delivery_address=delivery_address,
+            pickup_hub=pickup_hub or (p_hub_obj.name if p_hub_obj else "Kathmandu"),
+            delivery_hub=delivery_hub or (d_hub_obj.name if d_hub_obj else "Kathmandu"),
+            hub_id=p_hub_obj.id if p_hub_obj else None,
+            pickup_latitude=pickup_lat,
+            pickup_longitude=pickup_lng,
+            delivery_latitude=delivery_lat,
+            delivery_longitude=delivery_lng,
+            parcel_type=parcel_type,
+            service_type=service_type,
+            weight=weight,
+            length=length,
+            width=width,
+            height=height,
+            delivery_charge=delivery_charge,
+            payment_status=payment_status,
+            cod_amount=cod_amount,
+            status='Pending'
+        )
+        db.session.add(parcel)
+        db.session.commit()
+        
+        # Log History & Notifications
+        hist = TrackingHistory(parcel_id=parcel.id, status='Pending', location=pickup_address)
+        notif = NotificationLog(parcel_id=parcel.id, message="Shipment booked via Customer Self-Service Portal.", type='Booking')
+        db.session.add(hist)
+        db.session.add(notif)
+        db.session.commit()
+        
+        flash(f"Shipment booked successfully! Tracking ID: {tracking_id}", "success")
+        return redirect(url_for('customer_dashboard'))
+        
+    return render_template(
+        'customer_booking.html',
+        active_page='customer_book',
+        profile=profile,
+        hubs=hubs,
+        saved_addresses=saved_addresses,
+        merchandise_types=merchandise_types
+    )
+
+@app.route('/customer/shipments')
+@login_required
+def customer_shipments():
+    if current_user.role != 'customer':
+        return redirect(url_for('index'))
+    profile = CustomerProfile.query.filter_by(user_id=current_user.id).first_or_404()
+    parcels = Parcel.query.filter_by(customer_id=profile.id).order_by(Parcel.created_at.desc()).all()
+    return render_template('customer_shipments.html', active_page='customer_shipments', parcels=parcels, profile=profile)
+
+@app.route('/customer/addresses')
+@login_required
+def customer_addresses():
+    if current_user.role != 'customer':
+        return redirect(url_for('index'))
+    profile = CustomerProfile.query.filter_by(user_id=current_user.id).first_or_404()
+    addresses = CustomerAddress.query.filter_by(customer_id=profile.id).all()
+    return render_template('customer_addresses.html', active_page='customer_addresses', addresses=addresses, profile=profile)
+
+@app.route('/customer/address/add', methods=['POST'])
+@login_required
+def customer_add_address():
+    if current_user.role != 'customer':
+        return redirect(url_for('index'))
+    profile = CustomerProfile.query.filter_by(user_id=current_user.id).first_or_404()
+    
+    label = request.form.get('label', 'Home').strip()
+    recipient_name = request.form.get('recipient_name', '').strip()
+    phone = request.form.get('phone', '').strip()
+    address = request.form.get('address', '').strip()
+    city = request.form.get('city', 'Kathmandu').strip()
+    is_default = True if request.form.get('is_default') else False
+    
+    if not recipient_name or not phone or not address:
+        flash("Recipient Name, Phone, and Address are required.", "error")
+        return redirect(url_for('customer_addresses'))
+        
+    if is_default:
+        CustomerAddress.query.filter_by(customer_id=profile.id).update({'is_default': False})
+        
+    new_addr = CustomerAddress(
+        customer_id=profile.id,
+        label=label,
+        recipient_name=recipient_name,
+        phone=phone,
+        address=address,
+        city=city,
+        is_default=is_default
+    )
+    db.session.add(new_addr)
+    db.session.commit()
+    flash("New address saved to address book!", "success")
+    return redirect(url_for('customer_addresses'))
+
+@app.route('/customer/address/delete/<int:id>')
+@login_required
+def customer_delete_address(id):
+    if current_user.role != 'customer':
+        return redirect(url_for('index'))
+    profile = CustomerProfile.query.filter_by(user_id=current_user.id).first_or_404()
+    addr = CustomerAddress.query.filter_by(id=id, customer_id=profile.id).first_or_404()
+    db.session.delete(addr)
+    db.session.commit()
+    flash("Address removed.", "info")
+    return redirect(url_for('customer_addresses'))
+
+@app.route('/customer/invoices')
+@login_required
+def customer_invoices():
+    if current_user.role != 'customer':
+        return redirect(url_for('index'))
+    profile = CustomerProfile.query.filter_by(user_id=current_user.id).first_or_404()
+    parcels = Parcel.query.filter_by(customer_id=profile.id).order_by(Parcel.created_at.desc()).all()
+    company = CompanySetting.query.first()
+    return render_template('customer_invoices.html', active_page='customer_invoices', parcels=parcels, profile=profile, company=company)
+
+@app.route('/customer/support-tickets', methods=['GET', 'POST'])
+@login_required
+def customer_support_tickets():
+    if current_user.role != 'customer':
+        return redirect(url_for('index'))
+    profile = CustomerProfile.query.filter_by(user_id=current_user.id).first_or_404()
+    
+    if request.method == 'POST':
+        subject = request.form.get('subject', '').strip()
+        category = request.form.get('category', 'Delivery Issue')
+        priority = request.form.get('priority', 'Medium')
+        message = request.form.get('message', '').strip()
+        tracking_id = request.form.get('tracking_id', '').strip()
+        
+        parcel = Parcel.query.filter_by(tracking_id=tracking_id).first() if tracking_id else None
+        
+        ticket_number = f"TKT-{random.randint(10000, 99999)}"
+        ticket = SupportTicket(
+            ticket_number=ticket_number,
+            customer_id=profile.id,
+            parcel_id=parcel.id if parcel else None,
+            subject=subject,
+            category=category,
+            priority=priority,
+            status='Open'
+        )
+        db.session.add(ticket)
+        db.session.commit()
+        
+        if message:
+            reply = TicketReply(
+                ticket_id=ticket.id,
+                user_id=current_user.id,
+                message=message
+            )
+            db.session.add(reply)
+            db.session.commit()
+            
+        flash(f"Support ticket {ticket_number} created! Our staff will respond shortly.", "success")
+        return redirect(url_for('customer_support_tickets'))
+        
+    tickets = SupportTicket.query.filter_by(customer_id=profile.id).order_by(SupportTicket.created_at.desc()).all()
+    parcels = Parcel.query.filter_by(customer_id=profile.id).all()
+    return render_template('customer_support.html', active_page='customer_support', tickets=tickets, parcels=parcels, profile=profile)
+
+@app.route('/customer/support-ticket/<int:id>', methods=['GET', 'POST'])
+@login_required
+def customer_ticket_detail(id):
+    ticket = SupportTicket.query.get_or_404(id)
+    
+    # Allow ticket access to the customer who owns it, or admin/branch manager
+    if current_user.role == 'customer':
+        profile = CustomerProfile.query.filter_by(user_id=current_user.id).first_or_404()
+        if ticket.customer_id != profile.id:
+            return redirect(url_for('index'))
+            
+    if request.method == 'POST':
+        message = request.form.get('message', '').strip()
+        if message:
+            reply = TicketReply(
+                ticket_id=ticket.id,
+                user_id=current_user.id,
+                message=message
+            )
+            db.session.add(reply)
+            ticket.updated_at = datetime.utcnow()
+            
+            # If admin/branch manager replied, set to In Progress
+            if current_user.role in ['admin', 'hub_admin', 'branch_manager']:
+                ticket.status = 'In Progress'
+                
+            db.session.commit()
+            flash("Reply posted.", "success")
+            
+    return render_template('ticket_detail.html', ticket=ticket)
+
+# 3. BRANCH PORTAL
+# ----------------
+
+@app.route('/branch/dashboard')
+@login_required
+def branch_dashboard():
+    if current_user.role not in ['hub_admin', 'branch_manager', 'booking_staff', 'warehouse_staff', 'dispatcher', 'branch_staff', 'admin']:
+        return redirect(url_for('index'))
+        
+    hub_name = get_current_hub_name()
+    hub = Hub.query.filter_by(name=hub_name).first() if hub_name else Hub.query.first()
+    
+    if hub:
+        parcels = Parcel.query.filter((Parcel.pickup_hub == hub.name) | (Parcel.delivery_hub == hub.name)).all()
+        riders = Driver.query.filter((Driver.hub_id == hub.id) | (Driver.hub_id == None)).all()
+        manifests = Manifest.query.filter((Manifest.origin_hub_id == hub.id) | (Manifest.destination_hub_id == hub.id)).all()
+        delivery_sheets = DeliverySheet.query.filter_by(hub_id=hub.id).order_by(DeliverySheet.created_at.desc()).limit(5).all()
+    else:
+        parcels = Parcel.query.all()
+        riders = Driver.query.all()
+        manifests = Manifest.query.all()
+        delivery_sheets = DeliverySheet.query.order_by(DeliverySheet.created_at.desc()).limit(5).all()
+        
+    total_parcels = len(parcels)
+    pending_pickups = sum(1 for p in parcels if p.status == 'Pending')
+    out_for_delivery = sum(1 for p in parcels if p.status == 'Out For Delivery')
+    delivered_today = sum(1 for p in parcels if p.status == 'Delivered' and p.delivered_at and p.delivered_at.date() == datetime.utcnow().date())
+    active_riders = sum(1 for r in riders if r.availability in ['Available', 'On Delivery'])
+    
+    stats = {
+        'total_parcels': total_parcels,
+        'pending_pickups': pending_pickups,
+        'out_for_delivery': out_for_delivery,
+        'delivered_today': delivered_today,
+        'active_riders': active_riders,
+        'total_manifests': len(manifests)
+    }
+    
+    recent_parcels = [p for p in parcels if p.status != 'Delivered'][:8]
+    
+    return render_template(
+        'branch_dashboard.html',
+        active_page='branch_dashboard',
+        hub=hub,
+        stats=stats,
+        recent_parcels=recent_parcels,
+        riders=riders,
+        delivery_sheets=delivery_sheets
+    )
+
+@app.route('/admin/booking')
+@login_required
+def admin_booking():
+    return redirect(url_for('manage_parcels'))
+
+@app.route('/branch/booking', methods=['GET', 'POST'])
+@login_required
+def branch_booking():
+    if current_user.role not in ['hub_admin', 'branch_manager', 'booking_staff', 'warehouse_staff', 'dispatcher', 'branch_staff', 'admin']:
+        return redirect(url_for('index'))
+        
+    hub_name = get_current_hub_name()
+    hubs = Hub.query.all()
+    customers = CustomerProfile.query.all()
+    merchandise_types = Merchandise.query.all()
+    
+    if request.method == 'POST':
+        sender_name = request.form.get('sender_name', '').strip()
+        sender_phone = request.form.get('sender_phone', '').strip()
+        receiver_name = request.form.get('receiver_name', '').strip()
+        receiver_phone = request.form.get('receiver_phone', '').strip()
+        pickup_address = request.form.get('pickup_address', '').strip()
+        delivery_address = request.form.get('delivery_address', '').strip()
+        pickup_hub = request.form.get('pickup_hub') or hub_name or (hubs[0].name if hubs else "Kathmandu")
+        delivery_hub = request.form.get('delivery_hub') or (hubs[1].name if len(hubs) > 1 else pickup_hub)
+        parcel_type = request.form.get('parcel_type', 'Standard Parcel')
+        service_type = request.form.get('service_type', 'Standard')
+        
+        try:
+            weight = float(request.form.get('weight', 1.0))
+        except (ValueError, TypeError):
+            weight = 1.0
+            
+        try:
+            length = float(request.form.get('length', 10.0))
+            width = float(request.form.get('width', 10.0))
+            height = float(request.form.get('height', 10.0))
+        except (ValueError, TypeError):
+            length, width, height = 10.0, 10.0, 10.0
+            
+        payment_status = request.form.get('payment_status', 'Pending')
+        try:
+            cod_amount = float(request.form.get('cod_amount', 0.0)) if payment_status == 'COD' else 0.0
+        except (ValueError, TypeError):
+            cod_amount = 0.0
+        
+        pickup_lat = float(request.form.get('pickup_latitude', 27.7154))
+        pickup_lng = float(request.form.get('pickup_longitude', 85.3123))
+        delivery_lat = float(request.form.get('delivery_latitude', 27.6915))
+        delivery_lng = float(request.form.get('delivery_longitude', 85.3331))
+        auto_assign = bool(request.form.get('auto_assign_driver'))
+        
+        if not sender_name or not sender_phone or not receiver_name or not receiver_phone:
+            flash("Sender and Receiver contact details are mandatory.", "error")
+            return redirect(url_for('branch_booking'))
+            
+        p_hub_obj = Hub.query.filter_by(name=pickup_hub).first()
+        d_hub_obj = Hub.query.filter_by(name=delivery_hub).first()
+        rule = PricingRule.query.filter_by(
+            origin_hub_id=p_hub_obj.id if p_hub_obj else None,
+            destination_hub_id=d_hub_obj.id if d_hub_obj else None,
+            service_type=service_type,
+            is_active=True
+        ).first() if p_hub_obj and d_hub_obj else None
+        
+        if not rule:
+            rule = PricingRule.query.filter_by(service_type=service_type, is_active=True).first()
+            
+        base_rate = rule.base_rate if rule else (180.0 if service_type == 'Express' else 120.0)
+        extra_kg_rate = rule.extra_kg_rate if rule else 40.0
+        extra_weight = max(0.0, weight - (rule.base_weight_kg if rule else 1.0))
+        delivery_charge = round(base_rate + (extra_weight * extra_kg_rate), 2)
+        
+        tracking_id = f"WB{datetime.utcnow().strftime('%y%m%d')}{random.randint(1000, 9999)}"
+        
+        parcel = Parcel(
+            tracking_id=tracking_id,
+            sender_name=sender_name,
+            sender_phone=sender_phone,
+            receiver_name=receiver_name,
+            receiver_phone=receiver_phone,
+            pickup_address=pickup_address,
+            delivery_address=delivery_address,
+            pickup_hub=pickup_hub,
+            delivery_hub=delivery_hub,
+            hub_id=p_hub_obj.id if p_hub_obj else None,
+            pickup_latitude=pickup_lat,
+            pickup_longitude=pickup_lng,
+            delivery_latitude=delivery_lat,
+            delivery_longitude=delivery_lng,
+            parcel_type=parcel_type,
+            service_type=service_type,
+            weight=weight,
+            length=length,
+            width=width,
+            height=height,
+            delivery_charge=delivery_charge,
+            payment_status=payment_status,
+            cod_amount=cod_amount,
+            status='Pending',
+            created_at=datetime.utcnow()
+        )
+        db.session.add(parcel)
+        db.session.commit()
+        
+        assigned_driver_msg = ""
+        if auto_assign:
+            available_drivers = Driver.query.filter(Driver.availability.in_(['Available', 'On Delivery'])).all()
+            matched_driver, dist = greedy_driver_assignment(parcel, available_drivers)
+            if matched_driver:
+                parcel.assigned_driver_id = matched_driver.id
+                parcel.status = 'Assigned'
+                matched_driver.availability = 'On Delivery'
+                assigned_driver_msg = f" & auto-assigned to {matched_driver.name} ({round(dist, 1)} km away)"
+                
+        hist = TrackingHistory(parcel_id=parcel.id, status=parcel.status, location=f"Waybill Booked: {pickup_hub} Branch")
+        notif = NotificationLog(parcel_id=parcel.id, message=f"Waybill {tracking_id} booked at {pickup_hub} Branch. Fare: Rs. {delivery_charge}{assigned_driver_msg}.", type='Created')
+        db.session.add(hist)
+        db.session.add(notif)
+        db.session.commit()
+        
+        flash(f"Waybill {tracking_id} generated successfully at {pickup_hub}! Fare: Rs. {delivery_charge}{assigned_driver_msg}", "success")
+        return redirect(url_for('branch_dashboard'))
+        
+    return render_template(
+        'branch_booking.html',
+        active_page='branch_booking',
+        hub_name=hub_name,
+        hubs=hubs,
+        customers=customers,
+        merchandise_types=merchandise_types
+    )
+
+@app.route('/branch/delivery-sheets')
+@login_required
+def delivery_sheets():
+    if current_user.role not in ['admin', 'hub_admin', 'branch_manager', 'dispatcher']:
+        return redirect(url_for('index'))
+        
+    hub_id = get_current_hub_id()
+    if hub_id:
+        sheets = DeliverySheet.query.filter_by(hub_id=hub_id).order_by(DeliverySheet.created_at.desc()).all()
+    else:
+        sheets = DeliverySheet.query.order_by(DeliverySheet.created_at.desc()).all()
+        
+    return render_template('delivery_sheets.html', active_page='delivery_sheets', sheets=sheets)
+
+@app.route('/branch/delivery-sheet/create', methods=['GET', 'POST'])
+@login_required
+def create_delivery_sheet():
+    if current_user.role not in ['admin', 'hub_admin', 'branch_manager', 'dispatcher']:
+        return redirect(url_for('index'))
+        
+    hub_name = get_current_hub_name()
+    hub = Hub.query.filter_by(name=hub_name).first() if hub_name else Hub.query.first()
+    
+    if request.method == 'POST':
+        rider_id = int(request.form.get('rider_id'))
+        parcel_ids = request.form.getlist('parcel_ids')
+        notes = request.form.get('notes', '').strip()
+        
+        if not parcel_ids:
+            flash("Please select at least one parcel for this delivery sheet.", "error")
+            return redirect(url_for('create_delivery_sheet'))
+            
+        rider = Driver.query.get_or_404(rider_id)
+        sheet_number = f"DS-{datetime.utcnow().strftime('%y%m%d')}-{random.randint(1000, 9999)}"
+        
+        total_cod = 0.0
+        sheet = DeliverySheet(
+            sheet_number=sheet_number,
+            hub_id=hub.id if hub else rider.hub_id,
+            rider_id=rider.id,
+            status='Created',
+            total_parcels=len(parcel_ids),
+            notes=notes
+        )
+        db.session.add(sheet)
+        db.session.commit()
+        
+        for idx, pid in enumerate(parcel_ids, 1):
+            p = Parcel.query.get(int(pid))
+            if p:
+                p.assigned_driver_id = rider.id
+                p.status = 'Out For Delivery'
+                if p.payment_status == 'COD':
+                    total_cod += p.delivery_charge
+                    
+                item = DeliverySheetItem(
+                    delivery_sheet_id=sheet.id,
+                    parcel_id=p.id,
+                    stop_sequence=idx,
+                    status='Pending'
+                )
+                db.session.add(item)
+                
+                hist = TrackingHistory(parcel_id=p.id, status='Out For Delivery', location=f"Assigned to Courier {rider.name} on Sheet {sheet_number}")
+                notif = NotificationLog(parcel_id=p.id, message=f"Out for delivery with rider {rider.name}.", type='Out For Delivery')
+                db.session.add(hist)
+                db.session.add(notif)
+                
+        sheet.total_cod_amount = total_cod
+        rider.availability = 'On Delivery'
+        db.session.commit()
+        
+        flash(f"Delivery Sheet {sheet_number} created with {len(parcel_ids)} parcels assigned to {rider.name}!", "success")
+        return redirect(url_for('delivery_sheets'))
+        
+    available_parcels = Parcel.query.filter(Parcel.status.in_(['Assigned', 'Picked Up', 'In Transit', 'Pending'])).all()
+    riders = Driver.query.filter(Driver.availability.in_(['Available', 'On Delivery'])).all()
+    
+    return render_template(
+        'create_delivery_sheet.html',
+        active_page='delivery_sheets',
+        hub=hub,
+        available_parcels=available_parcels,
+        riders=riders
+    )
+
+@app.route('/branch/delivery-sheet/<int:id>')
+@login_required
+def view_delivery_sheet(id):
+    sheet = DeliverySheet.query.get_or_404(id)
+    company = CompanySetting.query.first()
+    return render_template('delivery_sheet_detail.html', sheet=sheet, company=company, no_layout=True)
+
+# 4. ADMIN PRICING RULES & SETTINGS
+# ---------------------------------
+
+@app.route('/admin/pricing-rules')
+@login_required
+def pricing_rules():
+    if current_user.role != 'admin':
+        return redirect(url_for('index'))
+    rules = PricingRule.query.all()
+    hubs = Hub.query.all()
+    return render_template('pricing_rules.html', active_page='pricing_rules', rules=rules, hubs=hubs)
+
+@app.route('/admin/pricing-rule/add', methods=['POST'])
+@login_required
+def add_pricing_rule():
+    if current_user.role != 'admin':
+        return redirect(url_for('index'))
+        
+    origin_hub_id = request.form.get('origin_hub_id')
+    destination_hub_id = request.form.get('destination_hub_id')
+    service_type = request.form.get('service_type', 'Standard')
+    base_weight_kg = float(request.form.get('base_weight_kg', 1.0))
+    base_rate = float(request.form.get('base_rate', 100.0))
+    extra_kg_rate = float(request.form.get('extra_kg_rate', 40.0))
+    delivery_time_hours = int(request.form.get('delivery_time_hours', 24))
+    
+    rule = PricingRule(
+        origin_hub_id=int(origin_hub_id) if origin_hub_id else None,
+        destination_hub_id=int(destination_hub_id) if destination_hub_id else None,
+        service_type=service_type,
+        base_weight_kg=base_weight_kg,
+        base_rate=base_rate,
+        extra_kg_rate=extra_kg_rate,
+        delivery_time_hours=delivery_time_hours,
+        is_active=True
+    )
+    db.session.add(rule)
+    db.session.commit()
+    flash("Pricing rule created successfully!", "success")
+    return redirect(url_for('pricing_rules'))
+
+@app.route('/admin/pricing-rule/delete/<int:id>')
+@login_required
+def delete_pricing_rule(id):
+    if current_user.role != 'admin':
+        return redirect(url_for('index'))
+    rule = PricingRule.query.get_or_404(id)
+    db.session.delete(rule)
+    db.session.commit()
+    flash("Pricing rule deleted.", "info")
+    return redirect(url_for('pricing_rules'))
+
+@app.route('/admin/company-settings', methods=['GET', 'POST'])
+@login_required
+def company_settings():
+    if current_user.role != 'admin':
+        return redirect(url_for('index'))
+        
+    setting = CompanySetting.query.first()
+    if not setting:
+        setting = CompanySetting()
+        db.session.add(setting)
+        db.session.commit()
+        
+    if request.method == 'POST':
+        setting.company_name = request.form.get('company_name', '').strip()
+        setting.phone = request.form.get('phone', '').strip()
+        setting.email = request.form.get('email', '').strip()
+        setting.address = request.form.get('address', '').strip()
+        setting.vat_pan_number = request.form.get('vat_pan_number', '').strip()
+        setting.currency = request.form.get('currency', 'Rs.').strip()
+        setting.terms_conditions = request.form.get('terms_conditions', '').strip()
+        db.session.commit()
+        flash("Company settings updated successfully!", "success")
+        
+    return render_template('company_settings.html', active_page='company_settings', setting=setting)
+
+@app.route('/admin/cod-reconciliation')
+@login_required
+def cod_reconciliation():
+    if current_user.role not in ['admin', 'hub_admin']:
+        return redirect(url_for('index'))
+        
+    drivers = Driver.query.all()
+    cod_parcels = Parcel.query.filter_by(payment_status='COD').all()
+    
+    total_cod = sum(p.delivery_charge for p in cod_parcels)
+    collected_cod = sum(p.delivery_charge for p in cod_parcels if p.status == 'Delivered')
+    pending_cod = total_cod - collected_cod
+    
+    return render_template(
+        'cod_reconciliation.html',
+        active_page='cod_reconciliation',
+        drivers=drivers,
+        cod_parcels=cod_parcels,
+        total_cod=round(total_cod, 2),
+        collected_cod=round(collected_cod, 2),
+        pending_cod=round(pending_cod, 2)
+    )
+
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
+

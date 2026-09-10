@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+
+{% block title %}COD Reconciliation - ParcelFleet{% endblock %}
+{% block page_title %}Cash on Delivery (COD) Audit & Settlement{% endblock %}
+
+{% block content %}
+<div class="row g-4 mb-4">
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm rounded-4 p-4 bg-white border-start border-primary border-4">
+            <span class="text-muted small uppercase fw-bold">Total Expected COD</span>
+            <h3 class="fw-bold text-dark mt-1 mb-0">Rs. {{ total_cod }}</h3>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm rounded-4 p-4 bg-white border-start border-success border-4">
+            <span class="text-muted small uppercase fw-bold">Collected from Recipients</span>
+            <h3 class="fw-bold text-success mt-1 mb-0">Rs. {{ collected_cod }}</h3>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm rounded-4 p-4 bg-white border-start border-warning border-4">
+            <span class="text-muted small uppercase fw-bold">Pending with Couriers</span>
+            <h3 class="fw-bold text-warning mt-1 mb-0">Rs. {{ pending_cod }}</h3>
+        </div>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm rounded-4 bg-white p-4">
+    <h5 class="fw-bold text-dark mb-3"><i class="fas fa-hand-holding-dollar text-primary me-2"></i>COD Shipments Audit Trail</h5>
+
+    <div class="table-responsive">
+        <table class="table table-hover align-middle">
+            <thead class="table-light">
+                <tr class="small text-muted">
+                    <th>Tracking ID</th>
+                    <th>Recipient</th>
+                    <th>Assigned Courier</th>
+                    <th>COD Amount</th>
+                    <th>Status</th>
+                    <th>Payment Settlement</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for p in cod_parcels %}
+                <tr>
+                    <td><strong class="text-primary font-monospace">{{ p.tracking_id }}</strong></td>
+                    <td>{{ p.receiver_name }} ({{ p.receiver_phone }})</td>
+                    <td>{{ p.assigned_driver.name if p.assigned_driver else 'Unassigned' }}</td>
+                    <td><strong>Rs. {{ p.delivery_charge }}</strong></td>
+                    <td>
+                        <span class="badge bg-{% if p.status == 'Delivered' %}success{% else %}warning{% endif %}-subtle text-{% if p.status == 'Delivered' %}success{% else %}warning{% endif %} rounded-pill px-2 py-1">
+                            {{ p.status }}
+                        </span>
+                    </td>
+                    <td>
+                        {% if p.status == 'Delivered' %}
+                        <span class="badge bg-success text-white rounded-pill px-2 py-1"><i class="fas fa-check me-1"></i>Settled</span>
+                        {% else %}
+                        <span class="badge bg-warning text-dark rounded-pill px-2 py-1">Collection in Progress</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

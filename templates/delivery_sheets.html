@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+
+{% block title %}Delivery Sheets - ParcelFleet{% endblock %}
+{% block page_title %}Branch Delivery Sheets & Rider Dispatch{% endblock %}
+
+{% block content %}
+<div class="card border-0 shadow-sm rounded-4 bg-white p-4">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4 pb-3 border-bottom">
+        <div>
+            <h4 class="fw-bold text-dark mb-1"><i class="fas fa-clipboard-list text-primary me-2"></i>Rider Delivery Sheets (Run-Sheets)</h4>
+            <p class="text-muted small mb-0">Track batch dispatch sheets assigned to last-mile couriers.</p>
+        </div>
+        <a href="{{ url_for('create_delivery_sheet') }}" class="btn btn-primary rounded-pill px-4 fw-bold">
+            <i class="fas fa-plus-circle me-1"></i>Create New Delivery Sheet
+        </a>
+    </div>
+
+    {% if not sheets %}
+    <div class="text-center py-5 text-muted">
+        <i class="fas fa-clipboard-check fa-3x mb-3 text-secondary opacity-50"></i>
+        <h5>No delivery sheets generated yet.</h5>
+    </div>
+    {% else %}
+    <div class="table-responsive">
+        <table class="table table-hover align-middle">
+            <thead class="table-light">
+                <tr class="small text-muted">
+                    <th>Sheet Number</th>
+                    <th>Branch Hub</th>
+                    <th>Assigned Courier</th>
+                    <th>Parcels</th>
+                    <th>Total COD</th>
+                    <th>Status</th>
+                    <th>Created Date</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for s in sheets %}
+                <tr>
+                    <td><strong class="text-primary font-monospace">{{ s.sheet_number }}</strong></td>
+                    <td>{{ s.hub.name if s.hub else 'Central' }}</td>
+                    <td>
+                        <strong class="text-dark">{{ s.rider.name }}</strong>
+                        <small class="d-block text-muted">{{ s.rider.vehicle_number }}</small>
+                    </td>
+                    <td><strong>{{ s.total_parcels }}</strong> pkgs</td>
+                    <td><strong>Rs. {{ s.total_cod_amount }}</strong></td>
+                    <td>
+                        <span class="badge bg-{% if s.status == 'Completed' %}success{% elif s.status == 'Out For Delivery' %}primary{% else %}warning{% endif %}-subtle text-{% if s.status == 'Completed' %}success{% elif s.status == 'Out For Delivery' %}primary{% else %}warning{% endif %} rounded-pill px-2 py-1">
+                            {{ s.status }}
+                        </span>
+                    </td>
+                    <td><small class="text-muted">{{ s.created_at.strftime('%Y-%m-%d %H:%M') }}</small></td>
+                    <td>
+                        <a href="{{ url_for('view_delivery_sheet', id=s.id) }}" target="_blank" class="btn btn-sm btn-outline-secondary rounded-pill px-3">
+                            <i class="fas fa-print me-1"></i>View / Print
+                        </a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,202 @@
+{% extends "base.html" %}
+
+{% block title %}Book Shipment - Customer Portal{% endblock %}
+{% block page_title %}New Shipment Booking{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-12 col-xl-10">
+        <div class="card border-0 shadow-sm rounded-4 bg-white p-4 p-md-5">
+            <div class="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom">
+                <div>
+                    <h4 class="fw-bold text-dark mb-1"><i class="fas fa-box-open text-primary me-2"></i>Shipment Booking Wizard</h4>
+                    <p class="text-muted small mb-0">Fill in the sender and recipient details. Rate is calculated dynamically from live pricing matrix.</p>
+                </div>
+                <a href="{{ url_for('customer_dashboard') }}" class="btn btn-outline-secondary rounded-pill px-3 btn-sm">
+                    <i class="fas fa-arrow-left me-1"></i>Back to Dashboard
+                </a>
+            </div>
+
+            <form method="POST" action="{{ url_for('customer_book') }}" id="customerBookingForm">
+                <!-- ROW 1: SHIPPER & CONSIGNEE -->
+                <div class="row g-4 mb-4">
+                    <!-- Sender / Shipper -->
+                    <div class="col-md-6">
+                        <div class="p-3 bg-light rounded-4 border border-light h-100">
+                            <h6 class="fw-bold text-primary mb-3"><i class="fas fa-user-tag me-2"></i>1. Sender (Shipper) Details</h6>
+                            
+                            <div class="mb-3">
+                                <label class="form-label small fw-semibold">Sender Name / Store *</label>
+                                <input type="text" name="sender_name" class="form-control" value="{{ profile.company_name or profile.contact_person }}" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label small fw-semibold">Sender Mobile Phone *</label>
+                                <input type="tel" name="sender_phone" class="form-control" value="{{ profile.phone }}" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label small fw-semibold">Pickup Address *</label>
+                                <input type="text" name="pickup_address" class="form-control" value="{{ profile.address or '' }}" placeholder="e.g. Ward 4, Balaju, Kathmandu" required>
+                            </div>
+                            <div class="mb-0">
+                                <label class="form-label small fw-semibold">Nearest Pickup Hub *</label>
+                                <select class="form-select" name="pickup_hub" id="bookPickupHub" onchange="updateEstimatedRate()">
+                                    {% for h in hubs %}
+                                    <option value="{{ h.name }}">{{ h.name }} Hub</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Receiver / Consignee -->
+                    <div class="col-md-6">
+                        <div class="p-3 bg-light rounded-4 border border-light h-100">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <h6 class="fw-bold text-success mb-0"><i class="fas fa-location-dot me-2"></i>2. Recipient (Consignee) Details</h6>
+                                {% if saved_addresses %}
+                                <select class="form-select form-select-sm w-auto" onchange="fillSavedAddress(this)">
+                                    <option value="">-- Load Saved Address --</option>
+                                    {% for a in saved_addresses %}
+                                    <option value="{{ a.recipient_name }}|{{ a.phone }}|{{ a.address }}|{{ a.city }}">{{ a.label }}: {{ a.recipient_name }}</option>
+                                    {% endfor %}
+                                </select>
+                                {% endif %}
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label small fw-semibold">Receiver Full Name *</label>
+                                <input type="text" name="receiver_name" id="recName" class="form-control" placeholder="e.g. Sita Sharma" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label small fw-semibold">Receiver Phone *</label>
+                                <input type="tel" name="receiver_phone" id="recPhone" class="form-control" placeholder="98XXXXXXXX" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label small fw-semibold">Destination Street Address *</label>
+                                <input type="text" name="delivery_address" id="recAddress" class="form-control" placeholder="e.g. House 45, New Baneshwor" required>
+                            </div>
+                            <div class="mb-0">
+                                <label class="form-label small fw-semibold">Destination Delivery Hub *</label>
+                                <select class="form-select" name="delivery_hub" id="bookDeliveryHub" onchange="updateEstimatedRate()">
+                                    {% for h in hubs %}
+                                    <option value="{{ h.name }}" {% if loop.index == 2 %}selected{% endif %}>{{ h.name }} Hub</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ROW 2: PACKAGE SPECIFICATIONS & PRICING -->
+                <div class="p-3 bg-light rounded-4 border border-light mb-4">
+                    <h6 class="fw-bold text-dark mb-3"><i class="fas fa-weight-hanging text-primary me-2"></i>3. Parcel Specifications & Service Level</h6>
+                    
+                    <div class="row g-3 align-items-end">
+                        <div class="col-md-3">
+                            <label class="form-label small fw-semibold">Merchandise Category</label>
+                            <select class="form-select" name="parcel_type">
+                                <option value="Standard Goods">Standard Goods</option>
+                                <option value="Documents">Documents & Letters</option>
+                                <option value="Electronics">Electronics</option>
+                                <option value="Clothing">Clothing & Apparel</option>
+                                <option value="Fragile Items">Fragile Goods</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small fw-semibold">Weight (kg) *</label>
+                            <input type="number" name="weight" id="bookWeight" class="form-control" value="1.0" min="0.1" step="0.1" oninput="updateEstimatedRate()" required>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small fw-semibold">Service Tier</label>
+                            <select class="form-select" name="service_type" id="bookServiceType" onchange="updateEstimatedRate()">
+                                <option value="Standard">Standard (Surface)</option>
+                                <option value="Express">Express (Priority)</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small fw-semibold">Payment Mode</label>
+                            <select class="form-select" name="payment_status" id="paymentStatusSelect" onchange="toggleCodField(this)">
+                                <option value="Paid">Prepaid (Sender)</option>
+                                <option value="COD">Cash on Delivery (COD)</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3 d-none" id="codAmountCol">
+                            <label class="form-label small fw-semibold">COD Amount to Collect (Rs.)</label>
+                            <input type="number" name="cod_amount" class="form-control" value="0.0" min="0" step="10">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Live Charge Estimation Callout -->
+                <div class="card bg-primary-subtle border border-primary border-opacity-25 rounded-4 p-3 mb-4">
+                    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
+                        <div>
+                            <span class="text-muted small uppercase fw-bold">Dynamic Charge Preview:</span>
+                            <h3 class="fw-bold text-primary mb-0" id="liveChargeDisplay">Rs. 120.00</h3>
+                        </div>
+                        <div class="text-muted small">
+                            <span><i class="fas fa-truck me-1"></i>Route: <span id="routePreviewText">Calculating...</span></span> &bull;
+                            <span><i class="fas fa-clock me-1"></i>ETA: <span id="etaPreviewText">24 Hours</span></span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="d-flex justify-content-end gap-3">
+                    <a href="{{ url_for('customer_dashboard') }}" class="btn btn-secondary rounded-pill px-4">Cancel</a>
+                    <button type="submit" class="btn btn-primary rounded-pill px-5 fw-bold shadow">
+                        <i class="fas fa-check-circle me-1"></i>Confirm & Generate Waybill
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+function fillSavedAddress(sel) {
+    if (!sel.value) return;
+    const parts = sel.value.split('|');
+    document.getElementById('recName').value = parts[0] || '';
+    document.getElementById('recPhone').value = parts[1] || '';
+    document.getElementById('recAddress').value = parts[2] || '';
+}
+
+function toggleCodField(sel) {
+    const col = document.getElementById('codAmountCol');
+    if (sel.value === 'COD') {
+        col.classList.remove('d-none');
+    } else {
+        col.classList.add('d-none');
+    }
+}
+
+function updateEstimatedRate() {
+    const origin = document.getElementById('bookPickupHub').value;
+    const dest = document.getElementById('bookDeliveryHub').value;
+    const weight = document.getElementById('bookWeight').value || 1.0;
+    const serviceType = document.getElementById('bookServiceType').value;
+
+    fetch('/api/public/rate-calculate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            origin_hub: origin,
+            destination_hub: dest,
+            weight: parseFloat(weight),
+            service_type: serviceType
+        })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            document.getElementById('liveChargeDisplay').innerText = 'Rs. ' + Number(data.total_charge).toFixed(2);
+            document.getElementById('routePreviewText').innerText = origin + ' ➔ ' + dest + ' (' + data.distance_km + ' km)';
+            document.getElementById('etaPreviewText').innerText = data.delivery_time_hours + ' Hours';
+        }
+    })
+    .catch(err => console.error(err));
+}
+
+document.addEventListener('DOMContentLoaded', updateEstimatedRate);
+</script>
+{% endblock %}
