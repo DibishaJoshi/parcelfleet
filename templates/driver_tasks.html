@@ -15,65 +15,218 @@
         </a>
     </div>
 
-    {% if not tasks %}
-    <div class="card border-0 shadow-sm rounded-4 p-5 text-center bg-white">
-        <i class="fa-solid fa-circle-check text-success fa-3x mb-3"></i>
-        <h5 class="fw-bold text-dark">No Active Tasks!</h5>
-        <p class="text-muted small mb-0">You have no pending deliveries or pickups.</p>
-    </div>
-    {% else %}
-    <div class="card border-0 shadow-sm rounded-4 p-4 bg-white">
-        <div class="table-responsive">
-            <table class="table table-hover align-middle mb-0">
-                <thead class="table-light">
-                    <tr style="font-size: 0.75rem; text-transform: uppercase;">
-                        <th>Stop #</th>
-                        <th>Tracking ID</th>
-                        <th>Type</th>
-                        <th>Contact / Recipient</th>
-                        <th>Delivery Address</th>
-                        <th>Charge / COD</th>
-                        <th>Status</th>
-                        <th class="text-end">Actions</th>
-                    </tr>
-                </thead>
-                <tbody style="font-size: 0.85rem;">
-                    {% for p in tasks %}
-                    <tr>
-                        <td><span class="badge bg-primary rounded-circle" style="width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center;">{{ loop.index }}</span></td>
-                        <td><strong class="text-primary">{{ p.tracking_id }}</strong></td>
-                        <td>
-                            <span class="badge rounded-pill {% if p.status == 'Assigned' %}bg-success-subtle text-success{% else %}bg-warning-subtle text-warning-emphasis{% endif %}">
-                                {% if p.status == 'Assigned' %}PICKUP{% else %}DELIVERY{% endif %}
-                            </span>
-                        </td>
-                        <td>
-                            <div class="fw-bold text-dark">{{ p.receiver_name if p.status != 'Assigned' else p.sender_name }}</div>
-                            <small class="text-muted">{{ p.receiver_phone if p.status != 'Assigned' else p.sender_phone }}</small>
-                        </td>
-                        <td>
-                            <span class="text-muted small"><i class="fa-solid fa-location-dot text-danger me-1"></i>{{ p.delivery_address if p.status != 'Assigned' else p.pickup_address }}</span>
-                        </td>
-                        <td>
-                            <span class="fw-semibold">Rs. {{ p.cod_amount or p.delivery_charge }}</span>
-                        </td>
-                        <td>
-                            <span class="badge bg-secondary-subtle text-dark rounded-pill">{{ p.status }}</span>
-                        </td>
-                        <td class="text-end">
-                            <a href="tel:{{ p.receiver_phone if p.status != 'Assigned' else p.sender_phone }}" class="btn btn-xs btn-outline-secondary rounded-pill px-2 py-1">
-                                <i class="fa-solid fa-phone"></i>
-                            </a>
-                            <a href="{{ url_for('driver_route_planner') }}" class="btn btn-xs btn-primary rounded-pill px-3 py-1 ms-1">
-                                Navigate
-                            </a>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+    <!-- TABS -->
+    <ul class="nav nav-pills mb-4 gap-2" id="taskTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active rounded-pill px-4" id="individual-tasks-tab" data-bs-toggle="tab" data-bs-target="#individual-tasks" type="button" role="tab">
+                <i class="fa-solid fa-box me-2"></i>Individual Shipments & Pickups ({{ tasks | length }})
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link rounded-pill px-4" id="manifest-tasks-tab" data-bs-toggle="tab" data-bs-target="#manifest-tasks" type="button" role="tab">
+                <i class="fa-solid fa-truck-moving me-2"></i>Cargo Manifest Runs ({{ active_manifests | length }})
+            </button>
+        </li>
+    </ul>
+
+    <div class="tab-content" id="taskTabsContent">
+        <!-- TAB 1: INDIVIDUAL PARCELS -->
+        <div class="tab-pane fade show active" id="individual-tasks" role="tabpanel">
+            {% if not tasks %}
+            <div class="card border-0 shadow-sm rounded-4 p-5 text-center bg-white">
+                <i class="fa-solid fa-circle-check text-success fa-3x mb-3"></i>
+                <h5 class="fw-bold text-dark">No Active Individual Deliveries!</h5>
+                <p class="text-muted small mb-0">You have no pending individual deliveries or pickups.</p>
+            </div>
+            {% else %}
+            <div class="card border-0 shadow-sm rounded-4 p-4 bg-white">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr style="font-size: 0.75rem; text-transform: uppercase;">
+                                <th>Stop #</th>
+                                <th>Tracking ID</th>
+                                <th>Type</th>
+                                <th>Contact / Recipient</th>
+                                <th>Delivery Address</th>
+                                <th>Charge / COD</th>
+                                <th>Status</th>
+                                <th class="text-end">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody style="font-size: 0.85rem;">
+                            {% for p in tasks %}
+                            <tr>
+                                <td><span class="badge bg-primary rounded-circle" style="width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center;">{{ loop.index }}</span></td>
+                                <td>
+                                    <strong class="text-primary">{{ p.tracking_id }}</strong>
+                                    {% if p.manifest %}
+                                        <div class="mt-1">
+                                            <span class="badge bg-light text-primary border border-primary border-opacity-25" style="font-size: 0.7rem;">
+                                                <i class="fa-solid fa-truck-ramp-box me-1"></i>{{ p.manifest.manifest_number }}
+                                            </span>
+                                            {% if p.manifest.is_home_delivery %}
+                                            <span class="badge bg-success-subtle text-success border border-success border-opacity-25" style="font-size: 0.65rem;">
+                                                <i class="fa-solid fa-house-chimney me-1"></i>Doorstep
+                                            </span>
+                                            {% endif %}
+                                        </div>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <span class="badge rounded-pill {% if p.status == 'Assigned' %}bg-success-subtle text-success{% else %}bg-warning-subtle text-warning-emphasis{% endif %}">
+                                        {% if p.status == 'Assigned' %}PICKUP{% else %}DELIVERY{% endif %}
+                                    </span>
+                                </td>
+                                <td>
+                                    <div class="fw-bold text-dark">{{ p.receiver_name if p.status != 'Assigned' else p.sender_name }}</div>
+                                    <small class="text-muted">{{ p.receiver_phone if p.status != 'Assigned' else p.sender_phone }}</small>
+                                </td>
+                                <td>
+                                    <span class="text-muted small"><i class="fa-solid fa-location-dot text-danger me-1"></i>{{ p.delivery_address if p.status != 'Assigned' else p.pickup_address }}</span>
+                                </td>
+                                <td>
+                                    <span class="fw-semibold">Rs. {{ p.cod_amount or p.delivery_charge }}</span>
+                                </td>
+                                <td>
+                                    <span class="badge bg-secondary-subtle text-dark rounded-pill">{{ p.status }}</span>
+                                </td>
+                                <td class="text-end">
+                                    <a href="tel:{{ p.receiver_phone if p.status != 'Assigned' else p.sender_phone }}" class="btn btn-xs btn-outline-secondary rounded-pill px-2 py-1" title="Call Contact">
+                                        <i class="fa-solid fa-phone"></i>
+                                    </a>
+                                    <a href="{{ url_for('driver_route_planner') }}" class="btn btn-xs btn-outline-primary rounded-pill px-2 py-1 ms-1" title="View Route Planner Map">
+                                        <i class="fa-solid fa-map-location-dot"></i>
+                                    </a>
+                                    <a href="https://www.google.com/maps/dir/?api=1&destination={{ p.delivery_latitude if p.status != 'Assigned' else p.pickup_latitude }},{{ p.delivery_longitude if p.status != 'Assigned' else p.pickup_longitude }}" target="_blank" class="btn btn-xs btn-outline-success rounded-pill px-2 py-1 ms-1" title="Open GPS Navigation">
+                                        <i class="fa-solid fa-location-arrow"></i>
+                                    </a>
+                                    <button type="button" class="btn btn-xs btn-primary rounded-pill px-3 py-1 ms-1" data-bs-toggle="modal" data-bs-target="#taskUpdateModal{{ p.id }}">
+                                        Update / Deliver
+                                    </button>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- TAB 2: ACTIVE MANIFEST BATCHES -->
+        <div class="tab-pane fade" id="manifest-tasks" role="tabpanel">
+            {% if not active_manifests %}
+            <div class="card border-0 shadow-sm rounded-4 p-5 text-center bg-white">
+                <i class="fa-solid fa-clipboard-check text-secondary fa-3x mb-3 opacity-50"></i>
+                <h5 class="fw-bold text-dark">No Active Manifest Tasks</h5>
+                <p class="text-muted small mb-0">You have no cargo manifests currently assigned.</p>
+            </div>
+            {% else %}
+            <div class="row g-4">
+                {% for m in active_manifests %}
+                <div class="col-12">
+                    <div class="card border-0 shadow-sm rounded-4 p-4 bg-white border-start border-primary border-4">
+                        <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3">
+                            <div>
+                                <span class="badge bg-dark rounded-pill px-3 py-1 fw-bold fs-6">
+                                    <i class="fa-solid fa-barcode me-1"></i>{{ m.manifest_number }}
+                                </span>
+                                {% if m.is_home_delivery %}
+                                    <span class="badge bg-success-subtle text-success border border-success rounded-pill px-3 py-1 ms-2">
+                                        <i class="fa-solid fa-house-chimney me-1"></i>Hub &rarr; Home Delivery
+                                    </span>
+                                {% else %}
+                                    <span class="badge bg-primary-subtle text-primary border border-primary rounded-pill px-3 py-1 ms-2">
+                                        <i class="fa-solid fa-truck-moving me-1"></i>Inter-Hub Transfer
+                                    </span>
+                                {% endif %}
+                                <span class="badge bg-primary rounded-pill px-3 py-1 ms-2">{{ m.manifest_status }}</span>
+                            </div>
+                            <div class="d-flex gap-2">
+                                <a href="{{ url_for('driver_manifests') }}" class="btn btn-primary btn-sm rounded-pill px-3">
+                                    <i class="fa-solid fa-arrow-up-right-from-square me-1"></i>Open Manifest Console
+                                </a>
+                                <a href="{{ url_for('view_manifest', id=m.id) }}" target="_blank" class="btn btn-outline-secondary btn-sm rounded-pill px-3">
+                                    <i class="fa-solid fa-print me-1"></i>Print Voucher
+                                </a>
+                            </div>
+                        </div>
+
+                        <div class="row g-3 p-3 bg-light rounded-3 mb-3">
+                            <div class="col-md-4">
+                                <small class="text-muted d-block">Origin</small>
+                                <strong class="text-dark">{{ m.source_hub.name if m.source_hub else (m.origin_hub.name if m.origin_hub else 'Origin Hub') }}</strong>
+                            </div>
+                            <div class="col-md-4">
+                                <small class="text-muted d-block">Destination / Scope</small>
+                                {% if m.is_home_delivery %}
+                                    <strong class="text-success"><i class="fa-solid fa-house-chimney me-1"></i>Individual Home Doorsteps</strong>
+                                {% else %}
+                                    <strong class="text-primary">{{ m.destination_hub.name if m.destination_hub else 'Dest Hub' }}</strong>
+                                {% endif %}
+                            </div>
+                            <div class="col-md-4">
+                                <small class="text-muted d-block">Cargo Breakdown</small>
+                                <strong>{{ m.items | length }} pkgs &bull; {{ m.total_weight or 0 }} kg</strong>
+                            </div>
+                        </div>
+                        
+                        {% if m.is_home_delivery and m.items %}
+                        <div class="bg-white p-3 rounded-3 border">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <span class="fw-semibold text-dark small"><i class="fa-solid fa-list-check text-success me-1"></i>Doorstep Delivery Progress</span>
+                                <span class="fw-bold text-success small">{{ m.delivered_items_count }} of {{ m.items | length }} Delivered ({{ m.delivery_progress_pct }}%)</span>
+                            </div>
+                            <div class="progress" style="height: 8px;">
+                                <div class="progress-bar bg-success" role="progressbar" style="width: {{ m.delivery_progress_pct }}%;"></div>
+                            </div>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
         </div>
     </div>
-    {% endif %}
 </div>
+
+<!-- TASK UPDATE MODALS -->
+{% for p in tasks %}
+<div class="modal fade" id="taskUpdateModal{{ p.id }}" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg rounded-4">
+            <form method="POST" action="{{ url_for('update_parcel_status_driver', id=p.id) }}" enctype="multipart/form-data">
+                <div class="modal-header border-bottom border-light p-3">
+                    <h5 class="modal-title fw-bold text-dark"><i class="fa-solid fa-arrows-rotate text-primary me-2"></i>Update #{% if p.tracking_id %}{{ p.tracking_id }}{% else %}{{ p.id }}{% endif %}</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-4 text-dark">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Next Lifecycle Stage</label>
+                        <select class="form-select" name="status" required>
+                            <option value="">-- Choose Status --</option>
+                            <option value="Picked Up" {% if p.status == 'Assigned' %}selected{% endif %}>Picked Up</option>
+                            <option value="In Transit" {% if p.status == 'Picked Up' %}selected{% endif %}>In Transit</option>
+                            <option value="Out For Delivery" {% if p.status in ['In Transit', 'Manifested'] %}selected{% endif %}>Out For Delivery</option>
+                            <option value="Delivered" {% if p.status == 'Out For Delivery' %}selected{% endif %}>Delivered (Success complete)</option>
+                            <option value="Failed Attempt">Failed Delivery Attempt</option>
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Delivery / Status Notes</label>
+                        <textarea class="form-control" name="delivery_notes" placeholder="e.g. Delivered directly to receiver at home." rows="2"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer border-top border-light p-3">
+                    <button type="button" class="btn btn-secondary rounded-pill px-3" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary rounded-pill px-4">Save Status & Deliver</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endfor %}
 {% endblock %}

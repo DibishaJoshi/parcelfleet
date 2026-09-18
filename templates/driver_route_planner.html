@@ -190,25 +190,17 @@
                         <label for="statusSelect{{ p.id }}" class="form-label fw-semibold">Next Lifecycle Stage</label>
                         <select class="form-select status-workflow-select" name="status" id="statusSelect{{ p.id }}" data-parcel-id="{{ p.id }}" required onchange="toggleWorkflowSections(this)">
                             <option value="">-- Choose Lifecycle Stage --</option>
-                            {% if p.status == 'Assigned' %}
-                            <option value="Picked Up">Picked Up (Log package verification)</option>
-                            {% endif %}
-                            {% if p.status == 'Picked Up' %}
-                            <option value="In Transit">In Transit</option>
-                            {% endif %}
-                            {% if p.status == 'In Transit' %}
-                            <option value="Out For Delivery">Out For Delivery</option>
-                            {% endif %}
-                            {% if p.status == 'Out For Delivery' %}
-                            <option value="Delivered">Delivered (Success complete)</option>
+                            <option value="Picked Up" {% if p.status == 'Assigned' %}selected{% endif %}>Picked Up (Package in courier custody)</option>
+                            <option value="In Transit" {% if p.status == 'Picked Up' %}selected{% endif %}>In Transit</option>
+                            <option value="Out For Delivery" {% if p.status in ['In Transit', 'Manifested'] %}selected{% endif %}>Out For Delivery (En route to destination)</option>
+                            <option value="Delivered" {% if p.status == 'Out For Delivery' %}selected{% endif %}>Delivered (Direct doorstep handoff complete)</option>
                             <option value="Failed Attempt">Failed Delivery Attempt (Exception)</option>
-                            {% endif %}
                         </select>
                     </div>
 
                     <!-- PICKED UP IMAGE -->
                     <div class="mb-3 d-none" id="pickup_section{{ p.id }}">
-                        <label class="form-label fw-semibold">Parcel State Verification Photo (Pickup) *</label>
+                        <label class="form-label fw-semibold">Parcel State Verification Photo (Pickup - Optional)</label>
                         <div class="photo-upload-preview mb-2" id="pickup_preview{{ p.id }}" onclick="document.getElementById('pickup_file{{ p.id }}').click()">
                             <div class="text-center upload-icon-container">
                                 <i class="fas fa-camera text-muted mb-2" style="font-size: 2rem;"></i>
@@ -223,7 +215,7 @@
                         <h6 class="fw-bold text-primary border-bottom border-light pb-2 mb-3"><i class="fas fa-file-signature me-2"></i>Proof of Delivery Verification (POD)</h6>
                         
                         <div class="mb-3">
-                            <label class="form-label fw-semibold">Delivery Handoff Verification Photo *</label>
+                            <label class="form-label fw-semibold">Delivery Handoff Verification Photo (Optional)</label>
                             <div class="photo-upload-preview mb-2" id="delivery_preview{{ p.id }}" onclick="document.getElementById('delivery_file{{ p.id }}').click()">
                                 <div class="text-center upload-icon-container">
                                     <i class="fas fa-camera text-muted mb-2" style="font-size: 2rem;"></i>
@@ -234,18 +226,18 @@
                         </div>
 
                         <div class="mb-3">
-                            <label for="delivery_notes" class="form-label fw-semibold">Handoff Confirmation Notes</label>
-                            <textarea class="form-control" name="delivery_notes" placeholder="e.g. Handed over safely to receiver." rows="2"></textarea>
+                            <label for="delivery_notes{{ p.id }}" class="form-label fw-semibold">Handoff Confirmation Notes</label>
+                            <textarea class="form-control" name="delivery_notes" id="delivery_notes{{ p.id }}" placeholder="e.g. Handed over safely to receiver at doorstep." rows="2"></textarea>
                         </div>
 
                         <div class="mb-3">
                             <div class="d-flex justify-content-between align-items-center mb-1">
-                                <label class="form-label fw-semibold mb-0">Customer Digital Signature *</label>
-                                <button type="button" class="btn btn-sm btn-link text-danger text-decoration-none p-0" id="clearSignature">Clear signature</button>
+                                <label class="form-label fw-semibold mb-0">Customer Digital Signature (Optional)</label>
+                                <button type="button" class="btn btn-sm btn-link text-danger text-decoration-none p-0 clear-sig-btn" data-parcel-id="{{ p.id }}">Clear signature</button>
                             </div>
                             <div class="signature-canvas-wrapper">
-                                <canvas id="signatureCanvas" class="signature-canvas"></canvas>
-                                <input type="hidden" name="customer_signature" id="customer_signature_data">
+                                <canvas id="signatureCanvas{{ p.id }}" class="signature-canvas" data-parcel-id="{{ p.id }}"></canvas>
+                                <input type="hidden" name="customer_signature" id="customer_signature_data{{ p.id }}">
                             </div>
                         </div>
                     </div>
@@ -265,7 +257,7 @@
                 </div>
                 <div class="modal-footer border-top border-light p-3">
                     <button type="button" class="btn btn-secondary rounded-pill px-3" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary rounded-pill px-4" style="background: #3B82F6; border: none;">Save Status</button>
+                    <button type="submit" class="btn btn-primary rounded-pill px-4" style="background: #3B82F6; border: none;">Save Status & Deliver</button>
                 </div>
             </form>
         </div>

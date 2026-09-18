@@ -12,58 +12,127 @@
         </div>
     </div>
 
-    {% if not history_deliveries %}
-    <div class="card border-0 shadow-sm rounded-4 p-5 text-center bg-white">
-        <i class="fa-solid fa-clock-rotate-left text-secondary fa-3x mb-3 opacity-50"></i>
-        <h5 class="fw-bold text-dark">No Delivery Records</h5>
-        <p class="text-muted small mb-0">Completed deliveries will appear in your archive.</p>
-    </div>
-    {% else %}
-    <div class="card border-0 shadow-sm rounded-4 p-4 bg-white">
-        <div class="table-responsive">
-            <table class="table table-hover align-middle mb-0">
-                <thead class="table-light">
-                    <tr style="font-size: 0.75rem; text-transform: uppercase;">
-                        <th>Tracking ID</th>
-                        <th>Recipient</th>
-                        <th>Delivery Point</th>
-                        <th>Delivered Timestamp</th>
-                        <th>COD / Charge</th>
-                        <th>Status</th>
-                        <th class="text-end">POD Voucher</th>
-                    </tr>
-                </thead>
-                <tbody style="font-size: 0.85rem;">
-                    {% for p in history_deliveries %}
-                    <tr>
-                        <td><strong class="text-dark">{{ p.tracking_id }}</strong></td>
-                        <td>
-                            <div class="fw-semibold text-dark">{{ p.receiver_name }}</div>
-                            <small class="text-muted">{{ p.receiver_phone }}</small>
-                        </td>
-                        <td><span class="text-muted small">{{ p.delivery_address }}</span></td>
-                        <td>{{ p.delivered_at.strftime('%Y-%m-%d %H:%M') if p.delivered_at else p.created_at.strftime('%Y-%m-%d') }}</td>
-                        <td><span class="fw-bold text-success">Rs. {{ p.delivery_charge }}</span></td>
-                        <td>
-                            <span class="badge {% if p.status == 'Delivered' %}bg-success-subtle text-success{% else %}bg-danger-subtle text-danger{% endif %} rounded-pill">
-                                {{ p.status }}
-                            </span>
-                        </td>
-                        <td class="text-end">
-                            {% if p.status == 'Delivered' %}
-                            <a href="{{ url_for('view_proof_of_delivery', id=p.id) }}" class="btn btn-sm btn-outline-success rounded-pill px-3">
-                                <i class="fa-solid fa-file-invoice me-1"></i>View POD
-                            </a>
-                            {% else %}
-                            <span class="text-muted small">N/A</span>
-                            {% endif %}
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+    <!-- HISTORY TABS -->
+    <ul class="nav nav-pills mb-4 gap-2" id="historyTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active rounded-pill px-4" id="shipment-history-tab" data-bs-toggle="tab" data-bs-target="#shipment-history" type="button" role="tab">
+                <i class="fa-solid fa-boxes-stacked me-2"></i>Delivered Shipments ({{ history_deliveries | length }})
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link rounded-pill px-4" id="manifest-history-tab" data-bs-toggle="tab" data-bs-target="#manifest-history" type="button" role="tab">
+                <i class="fa-solid fa-truck-moving me-2"></i>Completed Manifest Batches ({{ completed_manifests | length }})
+            </button>
+        </li>
+    </ul>
+
+    <div class="tab-content" id="historyTabsContent">
+        <!-- TAB 1: DELIVERED SHIPMENTS -->
+        <div class="tab-pane fade show active" id="shipment-history" role="tabpanel">
+            {% if not history_deliveries %}
+            <div class="card border-0 shadow-sm rounded-4 p-5 text-center bg-white">
+                <i class="fa-solid fa-clock-rotate-left text-secondary fa-3x mb-3 opacity-50"></i>
+                <h5 class="fw-bold text-dark">No Delivery Records</h5>
+                <p class="text-muted small mb-0">Completed deliveries will appear in your archive.</p>
+            </div>
+            {% else %}
+            <div class="card border-0 shadow-sm rounded-4 p-4 bg-white">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr style="font-size: 0.75rem; text-transform: uppercase;">
+                                <th>Tracking ID</th>
+                                <th>Recipient</th>
+                                <th>Delivery Point</th>
+                                <th>Delivered Timestamp</th>
+                                <th>COD / Charge</th>
+                                <th>Status</th>
+                                <th class="text-end">POD Voucher</th>
+                            </tr>
+                        </thead>
+                        <tbody style="font-size: 0.85rem;">
+                            {% for p in history_deliveries %}
+                            <tr>
+                                <td><strong class="text-dark">{{ p.tracking_id }}</strong></td>
+                                <td>
+                                    <div class="fw-semibold text-dark">{{ p.receiver_name }}</div>
+                                    <small class="text-muted">{{ p.receiver_phone }}</small>
+                                </td>
+                                <td><span class="text-muted small">{{ p.delivery_address }}</span></td>
+                                <td>{{ p.delivered_at.strftime('%Y-%m-%d %H:%M') if p.delivered_at else p.created_at.strftime('%Y-%m-%d') }}</td>
+                                <td><span class="fw-bold text-success">Rs. {{ p.delivery_charge }}</span></td>
+                                <td>
+                                    <span class="badge {% if p.status == 'Delivered' %}bg-success-subtle text-success{% else %}bg-danger-subtle text-danger{% endif %} rounded-pill">
+                                        {{ p.status }}
+                                    </span>
+                                </td>
+                                <td class="text-end">
+                                    {% if p.status == 'Delivered' %}
+                                    <a href="{{ url_for('view_proof_of_delivery', id=p.id) }}" class="btn btn-sm btn-outline-success rounded-pill px-3">
+                                        <i class="fa-solid fa-file-invoice me-1"></i>View POD
+                                    </a>
+                                    {% else %}
+                                    <span class="text-muted small">N/A</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- TAB 2: COMPLETED MANIFEST BATCHES -->
+        <div class="tab-pane fade" id="manifest-history" role="tabpanel">
+            {% if not completed_manifests %}
+            <div class="card border-0 shadow-sm rounded-4 p-5 text-center bg-white">
+                <i class="fa-solid fa-truck-ramp-box text-secondary fa-3x mb-3 opacity-50"></i>
+                <h5 class="fw-bold text-dark">No Completed Manifest Records</h5>
+                <p class="text-muted small mb-0">Delivered bulk freight and inter-hub manifests will appear here.</p>
+            </div>
+            {% else %}
+            <div class="card border-0 shadow-sm rounded-4 p-4 bg-white">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0" style="font-size: 0.85rem;">
+                        <thead class="table-light">
+                            <tr style="font-size: 0.75rem; text-transform: uppercase;">
+                                <th>Manifest #</th>
+                                <th>Origin &rarr; Destination Hub</th>
+                                <th>Vehicle Used</th>
+                                <th>Cargo Breakdown</th>
+                                <th>Dispatch Time</th>
+                                <th>Delivered At Hub</th>
+                                <th>Status</th>
+                                <th class="text-end">Voucher</th>
+                            </tr>
+                        </thead>
+                        <tbody style="font-size: 0.85rem;">
+                            {% for m in completed_manifests %}
+                            <tr>
+                                <td><strong class="text-dark">{{ m.manifest_number }}</strong></td>
+                                <td>
+                                    <div>{{ m.source_hub.name if m.source_hub else 'Hub' }} &rarr; <strong>{{ m.destination_hub.name if m.destination_hub else 'Hub' }}</strong></div>
+                                </td>
+                                <td>{{ m.assigned_vehicle.vehicle_number if m.assigned_vehicle else driver.vehicle_number }}</td>
+                                <td><span class="badge bg-light text-dark border">{{ m.items | length }} pkgs &bull; {{ m.total_weight or 0 }} kg</span></td>
+                                <td>{{ m.dispatch_date.strftime('%Y-%m-%d %H:%M') if m.dispatch_date else '-' }}</td>
+                                <td><span class="text-success fw-bold">{{ m.arrival_date.strftime('%Y-%m-%d %H:%M') if m.arrival_date else '-' }}</span></td>
+                                <td><span class="badge bg-success rounded-pill">Completed</span></td>
+                                <td class="text-end">
+                                    <a href="{{ url_for('view_manifest', id=m.id) }}" target="_blank" class="btn btn-sm btn-outline-secondary rounded-pill px-3">
+                                        <i class="fa-solid fa-eye me-1"></i>View
+                                    </a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            {% endif %}
         </div>
     </div>
-    {% endif %}
 </div>
 {% endblock %}

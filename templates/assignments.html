@@ -30,8 +30,8 @@
                     <thead>
                         <tr>
                             <th>ID</th>
-                            <th>Driver</th>
-                            <th>Vehicle</th>
+                            <th>Driver & License</th>
+                            <th>Vehicle & Class</th>
                             <th>Manifest / Parcel</th>
                             <th>Assigned Date</th>
                             <th>Status</th>
@@ -44,11 +44,12 @@
                             <td>#ASG-{{ a.id }}</td>
                             <td>
                                 <strong><i class="fa-solid fa-user me-1 text-primary"></i>{{ a.driver.name }}</strong><br>
+                                <span class="badge bg-primary-subtle text-primary border-0 me-1" style="font-size: 0.7rem;"><i class="fa-solid fa-id-card me-1"></i>{{ a.driver.license_type or 'Bike' }}</span>
                                 <span class="text-muted small">{{ a.driver.phone }}</span>
                             </td>
                             <td>
                                 <strong><i class="fa-solid fa-truck me-1 text-info"></i>{{ a.vehicle.vehicle_code }}</strong><br>
-                                <span class="badge bg-light text-dark border">{{ a.vehicle.license_plate }}</span>
+                                <span class="badge bg-light text-dark border">{{ a.vehicle.license_plate }} [{{ a.vehicle.vehicle_type }}]</span>
                             </td>
                             <td>
                                 {% if a.manifest_id %}
@@ -100,27 +101,36 @@
                 </div>
                 <div class="modal-body p-4">
                     <div class="alert alert-info border-0 mb-3" style="font-size: 0.85rem;">
-                        <i class="fa-solid fa-circle-info me-2"></i>Only <strong>Available</strong> drivers and vehicles can be assigned. One driver or vehicle cannot have multiple active assignments simultaneously.
+                        <i class="fa-solid fa-circle-info me-2"></i><strong>License Rule:</strong> Bike license holders must be assigned a Bike; Van license holders must be assigned a Van.
                     </div>
                     <div class="row g-3">
                         <div class="col-12">
                             <label class="form-label fw-semibold">Select Available Driver</label>
-                            <select name="driver_id" class="form-select" required>
+                            <select name="driver_id" id="assignmentDriverSelect" class="form-select" required>
                                 <option value="">-- Choose Driver --</option>
+                                <optgroup label="Available Drivers (Ready for Assignment)">
                                 {% for d in drivers %}
                                     {% if d.availability == 'Available' %}
-                                        <option value="{{ d.id }}">{{ d.name }} ({{ d.phone }}) - {{ d.hub.name if d.hub else 'All Hubs' }}</option>
+                                        <option value="{{ d.id }}" data-license="{{ d.license_type or 'Bike' }}">{{ d.name }} - {{ d.vehicle_type_name }} [License: {{ d.license_type or 'Bike' }} | Cap: {{ d.effective_capacity_weight }}kg] ({{ d.hub.name if d.hub else 'All Hubs' }})</option>
                                     {% endif %}
                                 {% endfor %}
+                                </optgroup>
+                                <optgroup label="Busy / Unavailable Drivers">
+                                {% for d in drivers %}
+                                    {% if d.availability != 'Available' %}
+                                        <option value="{{ d.id }}" data-license="{{ d.license_type or 'Bike' }}" class="text-muted">{{ d.name }} - {{ d.vehicle_type_name }} [License: {{ d.license_type or 'Bike' }} | Cap: {{ d.effective_capacity_weight }}kg] ({{ d.availability }})</option>
+                                    {% endif %}
+                                {% endfor %}
+                                </optgroup>
                             </select>
                         </div>
                         <div class="col-12">
                             <label class="form-label fw-semibold">Select Available Vehicle</label>
-                            <select name="vehicle_id" class="form-select" required>
+                            <select name="vehicle_id" id="assignmentVehicleSelect" class="form-select" required>
                                 <option value="">-- Choose Vehicle --</option>
                                 {% for v in vehicles %}
                                     {% if v.current_status == 'Available' %}
-                                        <option value="{{ v.id }}">{{ v.vehicle_code }} ({{ v.license_plate }}) - Max Cap: {{ v.capacity_weight }}kg</option>
+                                        <option value="{{ v.id }}" data-type="{{ v.vehicle_type }}">{{ v.vehicle_code }} ({{ v.license_plate }}) - [{{ v.vehicle_type }}] (Max: {{ v.capacity_weight }}kg)</option>
                                     {% endif %}
                                 {% endfor %}
                             </select>
@@ -146,4 +156,53 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const driverSelect = document.getElementById('assignmentDriverSelect');
+    const vehicleSelect = document.getElementById('assignmentVehicleSelect');
+
+    if (driverSelect && vehicleSelect) {
+        const originalOptions = Array.from(vehicleSelect.options);
+
+        driverSelect.addEventListener('change', function() {
+            const selectedDriverOpt = driverSelect.options[driverSelect.selectedIndex];
+            const driverLicense = selectedDriverOpt ? (selectedDriverOpt.dataset.license || '').toLowerCase() : '';
+
+            vehicleSelect.value = '';
+
+            originalOptions.forEach(opt => {
+                if (!opt.value) {
+                    opt.style.display = 'block';
+                    opt.disabled = false;
+                    return;
+                }
+                const vType = (opt.dataset.type || '').toLowerCase();
+                let match = false;
+                if (!driverLicense) {
+                    match = true;
+                } else if (driverLicense.includes('bike') && vType.includes('bike')) {
+                    match = true;
+                } else if (driverLicense.includes('van') && vType.includes('van')) {
+                    match = true;
+                } else if (driverLicense.includes('pickup') && vType.includes('pickup')) {
+                    match = true;
+                } else if (driverLicense.includes('truck') && vType.includes('truck')) {
+                    match = true;
+                }
+
+                if (match) {
+                    opt.style.display = 'block';
+                    opt.disabled = false;
+                } else {
+                    opt.style.display = 'none';
+                    opt.disabled = true;
+                }
+            });
+        });
+    }
+});
+</script>
 {% endblock %}

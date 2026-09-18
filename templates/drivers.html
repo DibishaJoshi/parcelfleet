@@ -37,14 +37,19 @@
                         <tr>
                             <td>
                                 <div class="fw-bold">{{ d.name }}</div>
-                                {% if not d.user %}
-                                <span class="badge bg-warning-subtle text-warning border-0 rounded-pill" style="font-size: 0.6rem;">Awaiting Reg</span>
-                                {% else %}
-                                <span class="badge bg-success-subtle text-success border-0 rounded-pill" style="font-size: 0.6rem;">Active User ({{ d.user.username }})</span>
-                                {% endif %}
+                                <div class="d-flex align-items-center gap-1 mt-1">
+                                    <span class="badge bg-primary-subtle text-primary border-0 rounded-pill" style="font-size: 0.65rem;">
+                                        <i class="fa-solid fa-id-card me-1"></i>{{ d.license_type or 'Bike' }} License
+                                    </span>
+                                    {% if not d.user %}
+                                    <span class="badge bg-warning-subtle text-warning border-0 rounded-pill" style="font-size: 0.6rem;">Awaiting Reg</span>
+                                    {% else %}
+                                    <span class="badge bg-success-subtle text-success border-0 rounded-pill" style="font-size: 0.6rem;">Active ({{ d.user.username }})</span>
+                                    {% endif %}
+                                </div>
                             </td>
                             <td>
-                                <small class="text-muted d-block"><i class="fas fa-motorcycle me-1 text-primary"></i>{{ d.vehicle_number }}</small>
+                                <small class="text-muted d-block"><i class="fas fa-truck-moving me-1 text-primary"></i>{{ d.vehicle_number }}</small>
                                 <small class="text-muted d-block"><i class="fas fa-phone me-1 text-primary"></i>{{ d.phone }}</small>
                                 {% if d.email %}
                                 <small class="text-muted d-block"><i class="fas fa-envelope me-1 text-primary"></i>{{ d.email }}</small>
@@ -86,6 +91,19 @@
                                             <div class="mb-3">
                                                 <label class="form-label fw-semibold">Driver Full Name *</label>
                                                 <input type="text" class="form-control" name="name" value="{{ d.name }}" required>
+                                            </div>
+                                            <div class="mb-3">
+                                                <label class="form-label fw-semibold">Driver License Category *</label>
+                                                <select class="form-select" name="license_type" required>
+                                                    <option value="Bike" {% if d.license_type == 'Bike' %}selected{% endif %}>Bike (Category A - Two Wheeler)</option>
+                                                    <option value="Van" {% if d.license_type == 'Van' %}selected{% endif %}>Van (Category B - Cargo Van / Minivan)</option>
+                                                    <option value="Pickup" {% if d.license_type == 'Pickup' %}selected{% endif %}>Pickup (Category C - Light Commercial)</option>
+                                                    <option value="Truck" {% if d.license_type == 'Truck' %}selected{% endif %}>Truck (Category D - Heavy Freight)</option>
+                                                </select>
+                                            </div>
+                                            <div class="mb-3">
+                                                <label class="form-label fw-semibold">License Number</label>
+                                                <input type="text" class="form-control" name="license_number" value="{{ d.license_number or '' }}">
                                             </div>
                                             <div class="mb-3">
                                                 <label class="form-label fw-semibold">Phone Number *</label>
@@ -175,11 +193,14 @@
                         <input type="text" class="form-control" name="license_number" placeholder="e.g. LIC-123456" required>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label fw-semibold">Driver Type (Vehicle Group) *</label>
-                        <select class="form-select" name="driver_type" id="addDriverTypeSelect" required>
-                            <option value="Bike">Bike Rider (Assign available Bike)</option>
-                            <option value="Truck/Van">Truck / Van Driver (Assign available Truck or Van)</option>
+                        <label class="form-label fw-semibold">License Category (License Type) *</label>
+                        <select class="form-select" name="license_type" id="addDriverLicenseTypeSelect" required>
+                            <option value="Bike">Bike (Category A - Two Wheeler Rider)</option>
+                            <option value="Van">Van (Category B - Cargo / Transit Van Driver)</option>
+                            <option value="Pickup">Pickup (Category C - Light Commercial Pickup Driver)</option>
+                            <option value="Truck">Truck (Category D - Heavy Cargo Truck Driver)</option>
                         </select>
+                        <small class="text-muted d-block mt-1">Drivers with a Bike license can only operate Bikes; drivers with a Van license can only operate Vans.</small>
                     </div>
                     <div class="mb-3">
                         <label class="form-label fw-semibold">Select Available Company Vehicle *</label>
@@ -228,16 +249,16 @@
 <script src="{{ url_for('static', filename='js/tracking.js') }}"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    const driverTypeSelect = document.getElementById('addDriverTypeSelect');
+    const licenseTypeSelect = document.getElementById('addDriverLicenseTypeSelect');
     const vehicleSelect = document.getElementById('addDriverVehicleSelect');
     const manualPlateGroup = document.getElementById('manualPlateGroup');
     const manualPlateInput = document.getElementById('manualVehicleNumber');
     
-    if (driverTypeSelect && vehicleSelect) {
+    if (licenseTypeSelect && vehicleSelect) {
         const allOptions = Array.from(vehicleSelect.options);
         
         function filterVehicles() {
-            const driverType = driverTypeSelect.value; // 'Bike' or 'Truck/Van'
+            const licenseType = (licenseTypeSelect.value || '').toLowerCase(); // 'bike', 'van', 'pickup', 'truck'
             
             // Clear current selection
             vehicleSelect.value = "";
@@ -248,23 +269,19 @@ document.addEventListener('DOMContentLoaded', function() {
                     opt.disabled = false;
                     return;
                 }
-                const vType = opt.getAttribute('data-type');
-                if (driverType === 'Bike') {
-                    if (vType === 'Bike') {
-                        opt.style.display = "block";
-                        opt.disabled = false;
-                    } else {
-                        opt.style.display = "none";
-                        opt.disabled = true;
-                    }
+                const vType = (opt.getAttribute('data-type') || '').toLowerCase();
+                let match = false;
+                if (licenseType.includes('bike') && vType.includes('bike')) match = true;
+                else if (licenseType.includes('van') && vType.includes('van')) match = true;
+                else if (licenseType.includes('pickup') && vType.includes('pickup')) match = true;
+                else if (licenseType.includes('truck') && vType.includes('truck')) match = true;
+
+                if (match) {
+                    opt.style.display = "block";
+                    opt.disabled = false;
                 } else {
-                    if (vType !== 'Bike') {
-                        opt.style.display = "block";
-                        opt.disabled = false;
-                    } else {
-                        opt.style.display = "none";
-                        opt.disabled = true;
-                    }
+                    opt.style.display = "none";
+                    opt.disabled = true;
                 }
             });
             
@@ -278,7 +295,6 @@ document.addEventListener('DOMContentLoaded', function() {
             } else {
                 manualPlateGroup.style.display = "none";
                 manualPlateInput.required = false;
-                // Pre-fill manual plate value with selected vehicle's plate from option text
                 const selectedOpt = vehicleSelect.options[vehicleSelect.selectedIndex];
                 const match = selectedOpt.text.match(/\(([^)]+)\)/);
                 if (match && match[1]) {

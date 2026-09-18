@@ -686,6 +686,11 @@ def create_assignment():
     driver = Driver.query.get_or_404(int(driver_id))
     vehicle = Vehicle.query.get_or_404(int(vehicle_id))
     
+    # LICENSE CONSTRAINT ENFORCEMENT: Bike license -> Bike, Van license -> Van, etc.
+    if not driver.can_drive_vehicle(vehicle):
+        flash(f"License Restriction Violation: Driver {driver.name} holds a '{driver.license_type}' license and CANNOT operate a {vehicle.vehicle_type} ({vehicle.vehicle_code}). Bike license holders must be assigned a Bike, and Van license holders must be assigned a Van.", "error")
+        return redirect(url_for('manage_assignments'))
+        
     # BUSINESS RULE ENFORCEMENT: Availability & Single Active Assignment
     if driver.availability != 'Available':
         flash(f"Conflict Error: Driver {driver.name} is currently '{driver.availability}' and cannot be assigned.", "error")
@@ -784,36 +789,135 @@ def create_manifest():
         
     origin_hub_id = request.form.get('origin_hub_id')
     destination_hub_id = request.form.get('destination_hub_id')
+    manifest_type = request.form.get('manifest_type', 'Inter-Hub Transfer').strip()
     route = request.form.get('route', '').strip()
     
-    if not origin_hub_id or not destination_hub_id:
-        flash("Origin and Destination hubs are required.", "error")
+    if not origin_hub_id:
+        flash("Origin Hub is required.", "error")
         return redirect(url_for('manage_manifests'))
+        
+    origin_hub = Hub.query.get(int(origin_hub_id))
+    dest_id = None
+    if manifest_type == 'Inter-Hub Transfer':
+        if not destination_hub_id:
+            flash("Destination Hub is required for Inter-Hub cargo transfers.", "error")
+            return redirect(url_for('manage_manifests'))
+        dest_id = int(destination_hub_id)
+        if not route and origin_hub:
+            dest_hub = Hub.query.get(dest_id)
+            route = f"{origin_hub.name} Hub -> {dest_hub.name if dest_hub else ''} Hub Transfer"
+    else:
+        # Hub to Home Delivery
+        if destination_hub_id and destination_hub_id.isdigit():
+            dest_id = int(destination_hub_id)
+        if not route and origin_hub:
+            route = f"{origin_hub.name} Hub -> Direct Customer Doorsteps (Home Delivery)"
         
     manifest_number = f"MNF-2026-{random.randint(1000, 9999)}"
     manifest = Manifest(
         manifest_number=manifest_number,
+        manifest_type=manifest_type,
         route=route,
         origin_hub_id=int(origin_hub_id),
-        destination_hub_id=int(destination_hub_id),
+        destination_hub_id=dest_id,
         manifest_status='Draft',
         hub_id=int(origin_hub_id)
     )
     db.session.add(manifest)
     db.session.commit()
     
-    flash(f"Manifest '{manifest_number}' created successfully!", "success")
+    flash(f"{manifest_type} Manifest '{manifest_number}' created successfully!", "success")
     return redirect(url_for('manifest_details', id=manifest.id))
 
 @app.route('/admin/manifest/<int:id>')
 @login_required
 def manifest_details(id):
-    if current_user.role not in ['admin', 'hub_admin', 'dispatcher', 'warehouse_staff']:
+    manifest = Manifest.query.get_or_404(id)
+    if current_user.role == 'driver':
+        driver = Driver.query.filter_by(user_id=current_user.id).first()
+        if not driver or manifest.assigned_driver_id != driver.id:
+            flash("Access Denied: Manifest is not assigned to your account.", "error")
+            return redirect(url_for('driver_manifests'))
+    elif current_user.role not in ['admin', 'hub_admin', 'dispatcher', 'warehouse_staff', 'booking_staff']:
+        return redirect(url_for('index'))
+        
+    pending_parcels = Parcel.query.filter_by(status='Pending').all()
+    available_drivers = Driver.query.filter_by(availability='Available').all()
+    available_vehicles = Vehicle.query.filter_by(current_status='Available').all()
+    return render_template('manifest_details.html', active_page='manifests', manifest=manifest, pending_parcels=pending_parcels, available_drivers=available_drivers, available_vehicles=available_vehicles)
+
+@app.route('/manifest/<int:id>/voucher')
+@login_required
+def view_manifest(id):
+    return manifest_details(id)
+
+@app.route('/admin/manifest/<int:id>/assign-transport', methods=['POST'])
+@login_required
+def assign_transport_to_manifest(id):
+    if current_user.role not in ['admin', 'hub_admin', 'dispatcher']:
         return redirect(url_for('index'))
         
     manifest = Manifest.query.get_or_404(id)
-    pending_parcels = Parcel.query.filter_by(status='Pending').all()
-    return render_template('manifest_details.html', active_page='manifests', manifest=manifest, pending_parcels=pending_parcels)
+    driver_id = request.form.get('driver_id')
+    vehicle_id = request.form.get('vehicle_id')
+    
+    if not driver_id or not vehicle_id:
+        flash("Both Driver and Vehicle must be selected for manifest dispatch assignment.", "error")
+        return redirect(url_for('manifest_details', id=manifest.id))
+        
+    driver = Driver.query.get_or_404(int(driver_id))
+    vehicle = Vehicle.query.get_or_404(int(vehicle_id))
+    
+    # LICENSE CONSTRAINT ENFORCEMENT: Bike license -> Bike, Van license -> Van, etc.
+    if not driver.can_drive_vehicle(vehicle):
+        flash(f"License Incompatibility Error: Driver {driver.name} holds a '{driver.license_type}' license and CANNOT operate a {vehicle.vehicle_type} ({vehicle.vehicle_code}). Bike license holders must be assigned a Bike, and Van license holders must be assigned a Van.", "error")
+        return redirect(url_for('manifest_details', id=manifest.id))
+        
+    # Capacity Check
+    if manifest.total_weight > vehicle.capacity_weight:
+        flash(f"Capacity Error: Manifest weight ({manifest.total_weight:.1f} kg) exceeds vehicle max payload capacity ({vehicle.capacity_weight:.1f} kg) for {vehicle.vehicle_code} ({vehicle.vehicle_type}).", "error")
+        return redirect(url_for('manifest_details', id=manifest.id))
+        
+    if manifest.total_volume_m3 > vehicle.capacity_volume:
+        flash(f"Volume Error: Manifest volume ({manifest.total_volume_m3:.2f} m³) exceeds vehicle volumetric capacity ({vehicle.capacity_volume:.2f} m³) for {vehicle.vehicle_code}.", "error")
+        return redirect(url_for('manifest_details', id=manifest.id))
+        
+    # Free previous driver/vehicle if any
+    if manifest.assigned_driver and manifest.assigned_driver_id != driver.id:
+        manifest.assigned_driver.availability = 'Available'
+    if manifest.assigned_vehicle and manifest.assigned_vehicle_id != vehicle.id:
+        manifest.assigned_vehicle.current_status = 'Available'
+        
+    manifest.assigned_driver_id = driver.id
+    manifest.assigned_vehicle_id = vehicle.id
+    driver.availability = 'On Delivery'
+    vehicle.current_status = 'Delivering'
+    
+    # Synchronize assigned driver to all parcels in this manifest
+    for item in manifest.items:
+        if item.parcel:
+            item.parcel.assigned_driver_id = driver.id
+    
+    # Create or update assignment
+    existing_asgn = Assignment.query.filter_by(manifest_id=manifest.id, assignment_status='Active').first()
+    if not existing_asgn:
+        new_asgn = Assignment(
+            manifest_id=manifest.id,
+            driver_id=driver.id,
+            vehicle_id=vehicle.id,
+            assigned_date=datetime.now(),
+            dispatch_time=datetime.now(),
+            assignment_status='Active',
+            hub_id=manifest.origin_hub_id or driver.hub_id
+        )
+        db.session.add(new_asgn)
+    else:
+        existing_asgn.driver_id = driver.id
+        existing_asgn.vehicle_id = vehicle.id
+        
+    db.session.commit()
+    flash(f"Transport successfully assigned! Courier {driver.name} and Vehicle {vehicle.vehicle_code} ({vehicle.license_plate}, Max {vehicle.capacity_weight}kg) assigned to Manifest {manifest.manifest_number}.", "success")
+    return redirect(url_for('manifest_details', id=manifest.id))
 
 @app.route('/admin/manifest/<int:id>/add-parcel', methods=['POST'])
 @login_required
@@ -826,6 +930,8 @@ def add_parcel_to_manifest(id):
         if parcel:
             item = ManifestItem(manifest_id=manifest.id, parcel_id=parcel.id)
             parcel.manifest_id = manifest.id
+            if manifest.assigned_driver_id:
+                parcel.assigned_driver_id = manifest.assigned_driver_id
             parcel.status = 'Manifested'
             
             manifest.total_parcels += 1
@@ -846,6 +952,7 @@ def remove_parcel_from_manifest(id, item_id):
     if item.parcel:
         item.parcel.status = 'Pending'
         item.parcel.manifest_id = None
+        item.parcel.assigned_driver_id = None
         manifest.total_parcels = max(0, manifest.total_parcels - 1)
         manifest.total_weight = max(0.0, manifest.total_weight - item.parcel.weight)
         
@@ -861,8 +968,29 @@ def dispatch_manifest(id):
     manifest.manifest_status = 'Dispatched'
     manifest.dispatch_date = datetime.utcnow()
     
+    if manifest.assigned_driver:
+        manifest.assigned_driver.availability = 'On Delivery'
+    if manifest.assigned_vehicle:
+        manifest.assigned_vehicle.current_status = 'Delivering'
+        
     for item in manifest.items:
-        item.parcel.status = 'In Transit'
+        if item.parcel:
+            if manifest.assigned_driver_id and not item.parcel.assigned_driver_id:
+                item.parcel.assigned_driver_id = manifest.assigned_driver_id
+            if manifest.is_home_delivery:
+                item.parcel.status = 'Out For Delivery'
+                db.session.add(TrackingHistory(
+                    parcel_id=item.parcel.id, 
+                    status='Out For Delivery', 
+                    location=f"Out for direct home delivery via Manifest {manifest.manifest_number} with Courier {manifest.assigned_driver.name if manifest.assigned_driver else 'Assigned Driver'}"
+                ))
+            else:
+                item.parcel.status = 'In Transit'
+                db.session.add(TrackingHistory(
+                    parcel_id=item.parcel.id, 
+                    status='In Transit', 
+                    location=f"In Transit via Inter-Hub Manifest {manifest.manifest_number}"
+                ))
         
     db.session.commit()
     flash(f"Manifest {manifest.manifest_number} successfully dispatched!", "success")
@@ -940,8 +1068,21 @@ def manage_users():
         flash("Access Denied: Main Admin privileges required.", "error")
         return redirect(url_for('index'))
         
-    users = User.query.all()
-    return render_template('users.html', active_page='users', users=users)
+    all_users = User.query.order_by(User.id.asc()).all()
+    staff_users = [u for u in all_users if u.role not in ['driver', 'hub_admin']]
+    drivers = Driver.query.order_by(Driver.id.asc()).all()
+    hub_admins = HubAdmin.query.order_by(HubAdmin.id.asc()).all()
+    hubs = Hub.query.all()
+    
+    return render_template(
+        'users.html', 
+        active_page='users', 
+        users=all_users,
+        staff_users=staff_users,
+        drivers=drivers,
+        hub_admins=hub_admins,
+        hubs=hubs
+    )
 
 @app.route('/admin/create-user', methods=['POST'])
 @login_required
@@ -1155,6 +1296,12 @@ def parcel_details(id):
         return redirect(url_for('manage_parcels'))
         
     drivers = Driver.query.all()
+    # Sort drivers: Available drivers first, then by capacity adequacy for the parcel, then by name
+    drivers.sort(key=lambda d: (
+        0 if d.availability == 'Available' else 1,
+        0 if (d.effective_capacity_weight >= (parcel.weight or 0.0)) else 1,
+        d.name
+    ))
     hubs = Hub.query.all()
     return render_template('parcel_details.html', active_page='parcels', parcel=parcel, drivers=drivers, hubs=hubs, hub_name=hub_name)
 
@@ -1361,9 +1508,9 @@ def assign_driver_manual(id):
         driver = Driver.query.get(int(driver_id))
         if driver:
             # Capacity validation based on vehicle limits
-            vehicle = driver.assigned_vehicle
-            cap_w = float(vehicle.capacity_weight if vehicle else 30.0)
-            cap_v = float(vehicle.capacity_volume if vehicle else 0.2)
+            cap_w = float(driver.effective_capacity_weight)
+            cap_v = float(driver.effective_capacity_volume)
+            v_type = driver.vehicle_type_name
             
             # Calculate driver current load
             driver_parcels = driver.parcels or []
@@ -1371,7 +1518,7 @@ def assign_driver_manual(id):
             parcel_vol = (parcel.length * parcel.width * parcel.height) / 1000000.0 if (parcel.length and parcel.width and parcel.height) else 0.005
             
             if current_weight + parcel.weight > cap_w + 1e-6:
-                flash(f"Capacity Warning: Driver {driver.name}'s vehicle ({vehicle.vehicle_type if vehicle else 'Bike'}) has limit of {cap_w} kg (Current Load: {round(current_weight, 1)} kg). Parcel weight is {parcel.weight} kg.", "error")
+                flash(f"Capacity Warning: Driver {driver.name}'s vehicle ({v_type}) has limit of {cap_w} kg (Current Load: {round(current_weight, 1)} kg). Parcel weight is {parcel.weight} kg.", "error")
                 return redirect(request.referrer or url_for('manage_parcels'))
                 
             parcel.assigned_driver_id = driver.id
@@ -1661,6 +1808,7 @@ def add_driver():
     availability = request.form.get('availability', 'Available')
     employee_code = request.form.get('employee_code', '').strip()
     license_number = request.form.get('license_number', '').strip()
+    license_type = request.form.get('license_type', 'Bike').strip()
     assigned_vehicle_id = request.form.get('assigned_vehicle_id')
     hub_id = request.form.get('hub_id')
     
@@ -1671,6 +1819,11 @@ def add_driver():
         assigned_veh_id = int(assigned_vehicle_id)
         selected_vehicle = Vehicle.query.get(assigned_veh_id)
         if selected_vehicle:
+            # Check license compatibility: Bike license -> Bike, Van license -> Van, etc.
+            temp_driver = Driver(license_type=license_type)
+            if not temp_driver.can_drive_vehicle(selected_vehicle):
+                flash(f"License Constraint Violation: A driver with a '{license_type}' license cannot be assigned to a {selected_vehicle.vehicle_type} ({selected_vehicle.vehicle_code}). Bike license holders can only drive Bikes, and Van license holders can only drive Vans.", "error")
+                return redirect(url_for('manage_drivers'))
             veh_number = selected_vehicle.license_plate
             
     if not veh_number:
@@ -1718,6 +1871,7 @@ def add_driver():
         status=availability,
         employee_code=employee_code,
         license_number=license_number,
+        license_type=license_type,
         hub_id=int(hub_id) if hub_id else None,
         latitude=27.7172,
         longitude=85.3240
@@ -1727,7 +1881,7 @@ def add_driver():
     
     selected_vehicle = Vehicle.query.get(assigned_veh_id) if assigned_veh_id else None
     assigned_info = f" assigned to vehicle {selected_vehicle.vehicle_code} ({selected_vehicle.vehicle_type})" if selected_vehicle else " registered successfully"
-    flash(f"Driver profile for {name}{assigned_info}!", "success")
+    flash(f"Driver profile for {name} ({license_type} License){assigned_info}!", "success")
     return redirect(url_for('manage_drivers'))
 
 @app.route('/admin/edit-driver/<int:id>', methods=['POST'])
@@ -1745,6 +1899,7 @@ def edit_driver(id):
     driver.status = driver.availability
     driver.employee_code = request.form.get('employee_code', '').strip() or None
     driver.license_number = request.form.get('license_number', '').strip() or None
+    driver.license_type = request.form.get('license_type', driver.license_type or 'Bike').strip()
     hub_id = request.form.get('hub_id')
     driver.hub_id = int(hub_id) if hub_id else None
     
@@ -1753,7 +1908,7 @@ def edit_driver(id):
         driver.user.password_hash = generate_password_hash(password)
         
     db.session.commit()
-    flash(f"Driver {driver.name} updated successfully!", "success")
+    flash(f"Driver {driver.name} ({driver.license_type} License) updated successfully!", "success")
     return redirect(url_for('manage_drivers'))
 
 @app.route('/admin/delete-driver/<int:id>', methods=['POST'])
@@ -1995,7 +2150,40 @@ def live_tracking_view(tracking_id):
     parcel = Parcel.query.filter_by(tracking_id=tracking_id).first_or_404()
     return render_template('live_tracking.html', active_page='parcels', parcel=parcel)
 
-# --- DRIVER ROUTES ---
+# --- DRIVER ROUTES & HELPER FUNCTIONS ---
+
+def get_driver_active_parcels(driver_id):
+    """Retrieve all active (non-delivered, non-cancelled) parcels assigned directly or through active manifests."""
+    direct = Parcel.query.filter_by(assigned_driver_id=driver_id).filter(
+        Parcel.status.notin_(['Delivered', 'Cancelled'])
+    ).all()
+    
+    manifest_p = Parcel.query.join(ManifestItem, ManifestItem.parcel_id == Parcel.id)\
+        .join(Manifest, Manifest.id == ManifestItem.manifest_id)\
+        .filter(Manifest.assigned_driver_id == driver_id)\
+        .filter(Manifest.manifest_status != 'Completed')\
+        .filter(Parcel.status.notin_(['Delivered', 'Cancelled'])).all()
+        
+    seen = {p.id: p for p in (direct + manifest_p)}
+    res = list(seen.values())
+    res.sort(key=lambda x: (0 if x.status == 'Assigned' else 1, x.id))
+    return res
+
+def get_driver_history_parcels(driver_id):
+    """Retrieve all historical completed/cancelled parcels assigned directly or through manifests."""
+    direct = Parcel.query.filter_by(assigned_driver_id=driver_id).filter(
+        Parcel.status.in_(['Delivered', 'Cancelled'])
+    ).all()
+    
+    manifest_p = Parcel.query.join(ManifestItem, ManifestItem.parcel_id == Parcel.id)\
+        .join(Manifest, Manifest.id == ManifestItem.manifest_id)\
+        .filter(Manifest.assigned_driver_id == driver_id)\
+        .filter(Parcel.status.in_(['Delivered', 'Cancelled'])).all()
+        
+    seen = {p.id: p for p in (direct + manifest_p)}
+    res = list(seen.values())
+    res.sort(key=lambda x: (x.delivered_at or datetime.min), reverse=True)
+    return res
 
 @app.route('/driver/dashboard')
 @login_required
@@ -2004,8 +2192,13 @@ def driver_dashboard():
         return redirect(url_for('index'))
         
     driver = Driver.query.filter_by(user_id=current_user.id).first_or_404()
-    active_deliveries = Parcel.query.filter_by(assigned_driver_id=driver.id).filter(Parcel.status.notin_(['Delivered', 'Cancelled'])).order_by(Parcel.created_at.desc()).all()
-    history_deliveries = Parcel.query.filter_by(assigned_driver_id=driver.id).filter(Parcel.status.in_(['Delivered', 'Cancelled'])).order_by(Parcel.delivered_at.desc()).all()
+    active_deliveries = get_driver_active_parcels(driver.id)
+    history_deliveries = get_driver_history_parcels(driver.id)
+    
+    # Query Assigned Inter-Hub / Freight Manifests
+    assigned_manifests = Manifest.query.filter_by(assigned_driver_id=driver.id).order_by(Manifest.created_at.desc()).all()
+    active_manifests = [m for m in assigned_manifests if m.manifest_status != 'Completed']
+    completed_manifests = [m for m in assigned_manifests if m.manifest_status == 'Completed']
     
     pickups_count = len([p for p in active_deliveries if p.status == 'Assigned'])
     deliveries_count = len([p for p in active_deliveries if p.status != 'Assigned'])
@@ -2016,11 +2209,131 @@ def driver_dashboard():
         active_page='driver_dashboard', 
         driver=driver, 
         active_deliveries=active_deliveries, 
-        history_deliveries=history_deliveries, 
+        history_deliveries=history_deliveries,
+        active_manifests=active_manifests,
+        completed_manifests=completed_manifests,
+        assigned_manifests=assigned_manifests,
         pickups_count=pickups_count,
         deliveries_count=deliveries_count,
         total_cod=total_cod
     )
+
+@app.route('/driver/manifests')
+@login_required
+def driver_manifests():
+    if current_user.role != 'driver':
+        return redirect(url_for('index'))
+        
+    driver = Driver.query.filter_by(user_id=current_user.id).first_or_404()
+    assigned_manifests = Manifest.query.filter_by(assigned_driver_id=driver.id).order_by(Manifest.created_at.desc()).all()
+    active_manifests = [m for m in assigned_manifests if m.manifest_status != 'Completed']
+    completed_manifests = [m for m in assigned_manifests if m.manifest_status == 'Completed']
+    
+    return render_template(
+        'driver_manifests.html',
+        active_page='driver_manifests',
+        driver=driver,
+        active_manifests=active_manifests,
+        completed_manifests=completed_manifests,
+        assigned_manifests=assigned_manifests
+    )
+
+@app.route('/driver/manifest/<int:id>/update-status', methods=['POST'])
+@login_required
+def update_manifest_status_driver(id):
+    if current_user.role != 'driver':
+        return redirect(url_for('index'))
+        
+    driver = Driver.query.filter_by(user_id=current_user.id).first_or_404()
+    manifest = Manifest.query.filter_by(id=id, assigned_driver_id=driver.id).first_or_404()
+    new_status = request.form.get('status', 'Completed')
+    
+    if new_status == 'In Transit':
+        manifest.manifest_status = 'Dispatched'
+        manifest.dispatch_date = datetime.now()
+        for item in manifest.items:
+            if item.parcel:
+                item.parcel.status = 'In Transit'
+                db.session.add(TrackingHistory(parcel_id=item.parcel.id, status='In Transit', location=f"In Transit with Courier {driver.name} on Manifest {manifest.manifest_number}"))
+        driver.availability = 'On Delivery'
+        if manifest.assigned_vehicle:
+            manifest.assigned_vehicle.current_status = 'Delivering'
+        db.session.commit()
+        flash(f"Manifest {manifest.manifest_number} marked as In Transit! Cargo batch underway.", "success")
+        
+    elif new_status == 'Completed':
+        manifest.manifest_status = 'Completed'
+        manifest.arrival_date = datetime.now()
+        for item in manifest.items:
+            if item.parcel:
+                item.parcel.status = 'Delivered'
+                item.parcel.delivered_at = datetime.now()
+                db.session.add(TrackingHistory(parcel_id=item.parcel.id, status='Delivered', location=f"Delivered at {manifest.destination_hub.name if manifest.destination_hub else 'Destination'} Hub via Manifest {manifest.manifest_number}"))
+            
+        driver.availability = 'Available'
+        driver.completed_deliveries = (driver.completed_deliveries or 0) + len(manifest.items)
+        if manifest.assigned_vehicle:
+            manifest.assigned_vehicle.current_status = 'Available'
+            
+        active_asgn = Assignment.query.filter_by(manifest_id=manifest.id, assignment_status='Active').first()
+        if active_asgn:
+            active_asgn.assignment_status = 'Returned'
+            active_asgn.actual_return = datetime.now()
+            
+        db.session.commit()
+        flash(f"Manifest {manifest.manifest_number} marked as Completed & Delivered to destination hub!", "success")
+        
+    return redirect(url_for('driver_manifests'))
+
+@app.route('/driver/manifest/<int:manifest_id>/deliver-parcel/<int:parcel_id>', methods=['POST'])
+@login_required
+def driver_deliver_manifest_parcel(manifest_id, parcel_id):
+    if current_user.role != 'driver':
+        return redirect(url_for('index'))
+        
+    driver = Driver.query.filter_by(user_id=current_user.id).first_or_404()
+    manifest = Manifest.query.filter_by(id=manifest_id, assigned_driver_id=driver.id).first_or_404()
+    item = ManifestItem.query.filter_by(manifest_id=manifest.id, parcel_id=parcel_id).first_or_404()
+    parcel = item.parcel
+    
+    notes = request.form.get('notes', '').strip()
+    
+    parcel.status = 'Delivered'
+    parcel.delivered_at = datetime.now()
+    
+    loc = f"Direct Home Delivery Completed to {parcel.receiver_name} at {parcel.delivery_address} by Driver {driver.name} (Manifest {manifest.manifest_number})"
+    if notes:
+        loc += f" [Notes: {notes}]"
+    db.session.add(TrackingHistory(parcel_id=parcel.id, status='Delivered', location=loc))
+    
+    driver.completed_deliveries = (driver.completed_deliveries or 0) + 1
+    
+    # Check if all parcels are delivered
+    all_delivered = all(i.parcel.status == 'Delivered' for i in manifest.items if i.parcel)
+    if all_delivered:
+        manifest.manifest_status = 'Completed'
+        manifest.arrival_date = datetime.now()
+        driver.availability = 'Available'
+        if manifest.assigned_vehicle:
+            manifest.assigned_vehicle.current_status = 'Available'
+        active_asgn = Assignment.query.filter_by(manifest_id=manifest.id, assignment_status='Active').first()
+        if active_asgn:
+            active_asgn.assignment_status = 'Returned'
+            active_asgn.actual_return = datetime.now()
+        db.session.commit()
+        flash(f"Home delivery completed for #{parcel.tracking_id}! All parcels on Manifest {manifest.manifest_number} have been delivered.", "success")
+    else:
+        if manifest.manifest_status in ['Draft', 'Created']:
+            manifest.manifest_status = 'Dispatched'
+            manifest.dispatch_date = datetime.now()
+        driver.availability = 'On Delivery'
+        if manifest.assigned_vehicle:
+            manifest.assigned_vehicle.current_status = 'Delivering'
+        db.session.commit()
+        remaining = manifest.pending_items_count
+        flash(f"Parcel #{parcel.tracking_id} successfully delivered! {remaining} stop(s) remaining.", "success")
+        
+    return redirect(url_for('driver_manifests'))
 
 @app.route('/driver/pickups')
 @login_required
@@ -2029,7 +2342,7 @@ def driver_pickups():
         return redirect(url_for('index'))
         
     driver = Driver.query.filter_by(user_id=current_user.id).first_or_404()
-    pickups = Parcel.query.filter_by(assigned_driver_id=driver.id, status='Assigned').order_by(Parcel.created_at.asc()).all()
+    pickups = [p for p in get_driver_active_parcels(driver.id) if p.status == 'Assigned']
     
     return render_template(
         'driver_pickups.html',
@@ -2045,13 +2358,15 @@ def driver_tasks():
         return redirect(url_for('index'))
         
     driver = Driver.query.filter_by(user_id=current_user.id).first_or_404()
-    tasks = Parcel.query.filter_by(assigned_driver_id=driver.id).filter(Parcel.status.notin_(['Delivered', 'Cancelled'])).order_by(Parcel.created_at.asc()).all()
+    tasks = get_driver_active_parcels(driver.id)
+    active_manifests = Manifest.query.filter_by(assigned_driver_id=driver.id).filter(Manifest.manifest_status != 'Completed').order_by(Manifest.created_at.desc()).all()
     
     return render_template(
         'driver_tasks.html',
         active_page='driver_tasks',
         driver=driver,
-        tasks=tasks
+        tasks=tasks,
+        active_manifests=active_manifests
     )
 
 @app.route('/driver/route-planner')
@@ -2061,7 +2376,7 @@ def driver_route_planner():
         return redirect(url_for('index'))
         
     driver = Driver.query.filter_by(user_id=current_user.id).first_or_404()
-    active_deliveries = Parcel.query.filter_by(assigned_driver_id=driver.id).filter(Parcel.status.notin_(['Delivered', 'Cancelled'])).order_by(Parcel.created_at.asc()).all()
+    active_deliveries = get_driver_active_parcels(driver.id)
     
     return render_template(
         'driver_route_planner.html',
@@ -2077,13 +2392,15 @@ def driver_history():
         return redirect(url_for('index'))
         
     driver = Driver.query.filter_by(user_id=current_user.id).first_or_404()
-    history_deliveries = Parcel.query.filter_by(assigned_driver_id=driver.id).filter(Parcel.status.in_(['Delivered', 'Cancelled'])).order_by(Parcel.delivered_at.desc()).all()
+    history_deliveries = get_driver_history_parcels(driver.id)
+    completed_manifests = Manifest.query.filter_by(assigned_driver_id=driver.id, manifest_status='Completed').order_by(Manifest.arrival_date.desc()).all()
     
     return render_template(
         'driver_history.html',
         active_page='driver_history',
         driver=driver,
-        history_deliveries=history_deliveries
+        history_deliveries=history_deliveries,
+        completed_manifests=completed_manifests
     )
 
 @app.route('/driver/account')
@@ -2093,7 +2410,7 @@ def driver_account():
         return redirect(url_for('index'))
         
     driver = Driver.query.filter_by(user_id=current_user.id).first_or_404()
-    recent_delivered = Parcel.query.filter_by(assigned_driver_id=driver.id, status='Delivered').order_by(Parcel.delivered_at.desc()).limit(15).all()
+    recent_delivered = [p for p in get_driver_history_parcels(driver.id) if p.status == 'Delivered'][:15]
     
     cod_in_hand = sum([p.delivery_charge for p in recent_delivered])
     estimated_earnings = driver.completed_deliveries * 35.0  # Commission per delivery
@@ -2139,6 +2456,9 @@ def update_parcel_status_driver(id):
     driver = Driver.query.filter_by(user_id=current_user.id).first_or_404()
     status = request.form.get('status')
     
+    if not parcel.assigned_driver_id:
+        parcel.assigned_driver_id = driver.id
+        
     if status == 'Picked Up':
         file = request.files.get('pickup_image')
         if file:
@@ -2173,15 +2493,30 @@ def update_parcel_status_driver(id):
         parcel.status = 'Delivered'
         parcel.payment_status = 'Paid'
         
-        driver.completed_deliveries += 1
-        driver.availability = 'Available'
+        driver.completed_deliveries = (driver.completed_deliveries or 0) + 1
         
-        db.session.add(TrackingHistory(parcel_id=parcel.id, status='Delivered', location=parcel.delivery_address))
+        db.session.add(TrackingHistory(parcel_id=parcel.id, status='Delivered', location=f"Delivered to {parcel.receiver_name} at {parcel.delivery_address} by Driver {driver.name}"))
         db.session.add(NotificationLog(parcel_id=parcel.id, message="Shipment delivered successfully.", type='Delivered'))
         
+        # If part of a manifest, check if all items are now delivered
+        if parcel.manifest:
+            all_del = all(i.parcel.status == 'Delivered' for i in parcel.manifest.items if i.parcel)
+            if all_del:
+                parcel.manifest.manifest_status = 'Completed'
+                parcel.manifest.arrival_date = datetime.utcnow()
+                driver.availability = 'Available'
+                if parcel.manifest.assigned_vehicle:
+                    parcel.manifest.assigned_vehicle.current_status = 'Available'
+                active_asgn = Assignment.query.filter_by(manifest_id=parcel.manifest.id, assignment_status='Active').first()
+                if active_asgn:
+                    active_asgn.assignment_status = 'Returned'
+                    active_asgn.actual_return = datetime.utcnow()
+        else:
+            driver.availability = 'Available'
+            
     elif status == 'Failed Attempt':
         failed_reason = request.form.get('failed_reason')
-        parcel.delivery_attempts += 1
+        parcel.delivery_attempts = (parcel.delivery_attempts or 0) + 1
         parcel.failed_reason = failed_reason
         parcel.status = 'Assigned'
         
@@ -2654,45 +2989,44 @@ def api_driver_active_route():
         'availability': driver.availability
     }
     
-    # 1. Check if driver has an active dispatched freight manifest
-    dispatched_manifest = Manifest.query.filter_by(assigned_driver_id=driver.id, manifest_status='Dispatched').first()
-    if dispatched_manifest and dispatched_manifest.origin_hub and dispatched_manifest.destination_hub:
-        routes = fetch_osrm_routes_with_alternatives(
-            driver.latitude, driver.longitude,
-            dispatched_manifest.destination_hub.latitude, dispatched_manifest.destination_hub.longitude
-        )
-        rec_route = routes[0] if routes else {
-            'coordinates': [{'lat': driver.latitude, 'lng': driver.longitude}, {'lat': dispatched_manifest.destination_hub.latitude, 'lng': dispatched_manifest.destination_hub.longitude}],
-            'distance_km': haversine_distance(driver.latitude, driver.longitude, dispatched_manifest.destination_hub.latitude, dispatched_manifest.destination_hub.longitude),
-            'duration_min': 15.0
-        }
-        
-        return jsonify({
-            'type': 'manifest',
-            'driver': driver_data,
-            'manifest_number': dispatched_manifest.manifest_number,
-            'origin': {'name': f"{dispatched_manifest.origin_hub.name} Hub", 'lat': dispatched_manifest.origin_hub.latitude, 'lng': dispatched_manifest.origin_hub.longitude},
-            'destination': {'name': f"{dispatched_manifest.destination_hub.name} Hub", 'lat': dispatched_manifest.destination_hub.latitude, 'lng': dispatched_manifest.destination_hub.longitude},
-            'coordinates': rec_route['coordinates'],
-            'distance_km': rec_route.get('distance_km', 0.0),
-            'duration_min': rec_route.get('duration_min', 0.0),
-            'stops': [
-                {
-                    'stop_number': 1,
-                    'name': f"Destination: {dispatched_manifest.destination_hub.name} Hub",
-                    'lat': dispatched_manifest.destination_hub.latitude,
-                    'lng': dispatched_manifest.destination_hub.longitude,
-                    'type': 'hub'
-                }
-            ]
-        })
-
-    # 2. Check active parcel deliveries assigned to driver
-    active_parcels = Parcel.query.filter_by(assigned_driver_id=driver.id).filter(
-        Parcel.status.in_(['Assigned', 'Picked Up', 'In Transit', 'Out For Delivery'])
-    ).order_by(Parcel.created_at.asc()).all()
+    # 1. Fetch all active parcels assigned to driver (directly or grouped in active manifests)
+    active_parcels = get_driver_active_parcels(driver.id)
     
     if not active_parcels:
+        # Check if driver has a bare manifest with no parcels attached yet
+        dispatched_manifest = Manifest.query.filter_by(assigned_driver_id=driver.id).filter(Manifest.manifest_status != 'Completed').first()
+        if dispatched_manifest and dispatched_manifest.destination_hub:
+            routes = fetch_osrm_routes_with_alternatives(
+                driver_data['lat'], driver_data['lng'],
+                dispatched_manifest.destination_hub.latitude, dispatched_manifest.destination_hub.longitude
+            )
+            rec_route = routes[0] if routes else {
+                'coordinates': [{'lat': driver_data['lat'], 'lng': driver_data['lng']}, {'lat': dispatched_manifest.destination_hub.latitude, 'lng': dispatched_manifest.destination_hub.longitude}],
+                'distance_km': haversine_distance(driver_data['lat'], driver_data['lng'], dispatched_manifest.destination_hub.latitude, dispatched_manifest.destination_hub.longitude),
+                'duration_min': 15.0
+            }
+            return jsonify({
+                'type': 'manifest',
+                'driver': driver_data,
+                'manifest_number': dispatched_manifest.manifest_number,
+                'manifest_type': dispatched_manifest.manifest_type,
+                'origin': {'name': f"{dispatched_manifest.origin_hub.name if dispatched_manifest.origin_hub else 'Origin'} Hub", 'lat': dispatched_manifest.origin_hub.latitude if dispatched_manifest.origin_hub else driver_data['lat'], 'lng': dispatched_manifest.origin_hub.longitude if dispatched_manifest.origin_hub else driver_data['lng']},
+                'destination': {'name': f"{dispatched_manifest.destination_hub.name} Hub", 'lat': dispatched_manifest.destination_hub.latitude, 'lng': dispatched_manifest.destination_hub.longitude},
+                'coordinates': rec_route['coordinates'],
+                'distance_km': rec_route.get('distance_km', 0.0),
+                'duration_min': rec_route.get('duration_min', 0.0),
+                'stops': [
+                    {
+                        'stop_number': 1,
+                        'name': f"Destination: {dispatched_manifest.destination_hub.name} Hub",
+                        'delivery_address': f"{dispatched_manifest.destination_hub.name} Hub, {dispatched_manifest.destination_hub.city or ''}",
+                        'lat': dispatched_manifest.destination_hub.latitude,
+                        'lng': dispatched_manifest.destination_hub.longitude,
+                        'type': 'hub'
+                    }
+                ]
+            })
+
         return jsonify({
             'type': 'idle',
             'driver': driver_data,
@@ -2702,37 +3036,41 @@ def api_driver_active_route():
             'duration_min': 0.0
         })
 
-    # Build stops and determine targets
-    driver_start = {'lat': driver.latitude, 'lng': driver.longitude, 'name': f"My Location ({driver.name})"}
+    # 2. Build stops for all active consignments (both direct deliveries and manifest stops)
+    driver_start = {'lat': driver.latitude or 27.7000, 'lng': driver.longitude or 85.3200, 'name': f"My Location ({driver.name})"}
     stops_input = []
     for p in active_parcels:
-        # If parcel not picked up yet, target is pickup location / pickup hub
         if p.status == 'Assigned':
-            stop_lat = p.pickup_latitude
-            stop_lng = p.pickup_longitude
-            stop_addr = p.pickup_address
+            stop_lat = p.pickup_latitude or 27.7000
+            stop_lng = p.pickup_longitude or 85.3200
+            stop_addr = p.pickup_address or 'Sender Location'
             stop_action = 'Pick Up from Sender'
         else:
-            stop_lat = p.delivery_latitude
-            stop_lng = p.delivery_longitude
-            stop_addr = p.delivery_address
-            stop_action = 'Deliver to Recipient'
+            stop_lat = p.delivery_latitude or 27.7100
+            stop_lng = p.delivery_longitude or 85.3300
+            stop_addr = p.delivery_address or 'Recipient Delivery Address'
+            stop_action = 'Deliver to Doorstep' if (p.manifest and p.manifest.is_home_delivery) else 'Deliver to Recipient'
             
         stops_input.append({
             'parcel_id': p.id,
             'tracking_id': p.tracking_id,
-            'receiver_name': p.receiver_name,
-            'receiver_phone': p.receiver_phone,
-            'sender_name': p.sender_name,
-            'sender_phone': p.sender_phone,
+            'receiver_name': p.receiver_name or 'Recipient',
+            'receiver_phone': p.receiver_phone or '',
+            'sender_name': p.sender_name or 'Sender',
+            'sender_phone': p.sender_phone or '',
             'delivery_address': stop_addr,
+            'pickup_address': p.pickup_address or '',
             'lat': stop_lat,
             'lng': stop_lng,
-            'weight': p.weight,
+            'weight': p.weight or 1.0,
             'status': p.status,
             'action_type': stop_action,
-            'payment_status': p.payment_status,
-            'delivery_charge': p.delivery_charge
+            'payment_status': p.payment_status or 'Pending',
+            'delivery_charge': p.delivery_charge or 0.0,
+            'cod_amount': p.cod_amount or 0.0,
+            'manifest_id': p.manifest_id,
+            'manifest_number': p.manifest.manifest_number if p.manifest else None,
+            'is_home_delivery': bool(p.manifest and p.manifest.is_home_delivery)
         })
 
     # Run TSP to sequence multiple stops optimally from driver's current GPS location

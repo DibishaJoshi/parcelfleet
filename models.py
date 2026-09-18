@@ -62,6 +62,7 @@ class Driver(db.Model):
     employee_code = db.Column(db.String(50), unique=True, nullable=True)
     address = db.Column(db.String(255), nullable=True)
     license_number = db.Column(db.String(50), nullable=True)
+    license_type = db.Column(db.String(50), default='Bike')  # 'Bike' (Category A), 'Van' (Category B), 'Pickup' (Category C), 'Truck' (Category D)
     license_expiry = db.Column(db.DateTime, nullable=True)
     joining_date = db.Column(db.DateTime, default=datetime.utcnow)
     assigned_vehicle_id = db.Column(db.Integer, db.ForeignKey('vehicles.id'), nullable=True)
@@ -80,10 +81,40 @@ class Driver(db.Model):
     assignments = db.relationship('Assignment', backref='driver', cascade="all, delete-orphan")
 
     @property
+    def allowed_vehicle_types(self):
+        """Returns the list of vehicle types this driver is legally licensed to operate."""
+        lt = (self.license_type or 'Bike').strip()
+        lt_lower = lt.lower()
+        if 'bike' in lt_lower or 'motorcycle' in lt_lower or lt == 'A':
+            return ['Bike']
+        elif 'van' in lt_lower or lt == 'B':
+            return ['Van']
+        elif 'pickup' in lt_lower or lt == 'C':
+            return ['Pickup']
+        elif 'truck' in lt_lower or lt == 'D':
+            return ['Truck']
+        return [lt]
+
+    def can_drive_vehicle(self, vehicle):
+        """Validates that the vehicle type matches the driver's license type strictly."""
+        if not vehicle:
+            return False
+        v_type = (vehicle.vehicle_type or '').strip()
+        return any(v_type.lower() == allowed.lower() for allowed in self.allowed_vehicle_types)
+
+    @property
     def effective_capacity_weight(self):
         """Returns the driver's vehicle weight capacity in kg."""
         if self.assigned_vehicle and self.assigned_vehicle.capacity_weight:
             return float(self.assigned_vehicle.capacity_weight)
+        # Default capacity based on license type
+        lt = (self.license_type or 'Bike').lower()
+        if 'van' in lt:
+            return 800.0
+        elif 'pickup' in lt:
+            return 1500.0
+        elif 'truck' in lt:
+            return 4000.0
         return 30.0  # Default bike capacity fallback (kg)
 
     @property
@@ -91,14 +122,22 @@ class Driver(db.Model):
         """Returns the driver's vehicle volume capacity in cubic meters (m3)."""
         if self.assigned_vehicle and self.assigned_vehicle.capacity_volume:
             return float(self.assigned_vehicle.capacity_volume)
+        # Default volume based on license type
+        lt = (self.license_type or 'Bike').lower()
+        if 'van' in lt:
+            return 4.5
+        elif 'pickup' in lt:
+            return 9.0
+        elif 'truck' in lt:
+            return 22.0
         return 0.2  # Default bike volume fallback (m3)
 
     @property
     def vehicle_type_name(self):
-        """Returns vehicle type string or 'Bike' as fallback."""
+        """Returns vehicle type string or license type as fallback."""
         if self.assigned_vehicle:
             return self.assigned_vehicle.vehicle_type
-        return 'Bike'
+        return self.license_type or 'Bike'
 
     @property
     def assigned_parcels(self):
@@ -148,6 +187,7 @@ class Manifest(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     manifest_number = db.Column(db.String(50), unique=True, nullable=False)
+    manifest_type = db.Column(db.String(50), default='Inter-Hub Transfer')  # 'Inter-Hub Transfer' or 'Hub to Home Delivery'
     route = db.Column(db.String(255), nullable=True)
     origin_hub_id = db.Column(db.Integer, db.ForeignKey('hubs.id'), nullable=True)
     destination_hub_id = db.Column(db.Integer, db.ForeignKey('hubs.id'), nullable=True)
@@ -168,6 +208,55 @@ class Manifest(db.Model):
     destination_hub = db.relationship('Hub', foreign_keys=[destination_hub_id])
     assigned_driver = db.relationship('Driver', foreign_keys=[assigned_driver_id])
     assigned_vehicle = db.relationship('Vehicle', foreign_keys=[assigned_vehicle_id])
+
+    @property
+    def is_home_delivery(self):
+        return (self.manifest_type or '').strip() == 'Hub to Home Delivery'
+
+    @property
+    def delivered_items_count(self):
+        return sum(1 for item in self.items if item.parcel and item.parcel.status == 'Delivered')
+
+    @property
+    def pending_items_count(self):
+        return sum(1 for item in self.items if item.parcel and item.parcel.status != 'Delivered')
+
+    @property
+    def delivery_progress_pct(self):
+        total = len(self.items)
+        if total == 0:
+            return 0
+        return round((self.delivered_items_count / total) * 100)
+
+    @property
+    def total_volume_m3(self):
+        """Total volume in cubic meters of all parcels in this manifest."""
+        vol = 0.0
+        for item in self.items:
+            if item.parcel:
+                vol += item.parcel.volume_m3
+        return round(vol, 4)
+
+    @property
+    def vehicle_capacity_weight(self):
+        if self.assigned_vehicle:
+            return float(self.assigned_vehicle.capacity_weight or 100.0)
+        return None
+
+    @property
+    def vehicle_capacity_volume(self):
+        if self.assigned_vehicle:
+            return float(self.assigned_vehicle.capacity_volume or 1.0)
+        return None
+
+    @property
+    def is_within_capacity(self):
+        if not self.assigned_vehicle:
+            return True
+        weight_ok = self.total_weight <= (self.assigned_vehicle.capacity_weight or 100.0) + 1e-6
+        volume_ok = self.total_volume_m3 <= (self.assigned_vehicle.capacity_volume or 1.0) + 1e-6
+        return weight_ok and volume_ok
+
 
 class ManifestItem(db.Model):
     __tablename__ = 'manifest_items'
@@ -254,6 +343,7 @@ class Parcel(db.Model):
     customer_signature = db.Column(db.Text, nullable=True)
     
     # Relationships
+    manifest = db.relationship('Manifest', foreign_keys=[manifest_id])
     history = db.relationship('TrackingHistory', backref='parcel', cascade="all, delete-orphan", order_by="TrackingHistory.timestamp.asc()")
     notifications = db.relationship('NotificationLog', backref='parcel', cascade="all, delete-orphan", order_by="NotificationLog.timestamp.asc()")
     

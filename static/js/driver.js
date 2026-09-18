@@ -98,17 +98,17 @@ window.toggleWorkflowSections = function (selectEl) {
 
     if (status === 'Picked Up') {
         if (pickupSec) pickupSec.classList.remove('d-none');
-        if (pickupFile) pickupFile.setAttribute('required', 'required');
     } else if (status === 'Delivered') {
         if (deliveredSec) deliveredSec.classList.remove('d-none');
-        if (deliveryFile) deliveryFile.setAttribute('required', 'required');
         
         setTimeout(() => {
-            const canvas = document.getElementById('signatureCanvas');
+            const canvas = document.getElementById('signatureCanvas' + pId);
             if (canvas) {
                 const rect = canvas.getBoundingClientRect();
-                canvas.width = rect.width;
-                canvas.height = rect.height;
+                if (rect.width > 0) {
+                    canvas.width = rect.width;
+                    canvas.height = rect.height || 120;
+                }
                 const ctx = canvas.getContext('2d');
                 ctx.strokeStyle = '#0F172A';
                 ctx.lineWidth = 3;
@@ -298,6 +298,13 @@ document.addEventListener('DOMContentLoaded', function () {
                         });
 
                         // Append Card HTML
+                        const manifestBadge = stop.manifest_number 
+                            ? `<span class="badge bg-light text-primary border border-primary border-opacity-25" style="font-size: 0.65rem;"><i class="fa-solid fa-truck-ramp-box me-1"></i>${stop.manifest_number}</span>` 
+                            : '';
+                        const doorstepBadge = stop.is_home_delivery 
+                            ? `<span class="badge bg-success-subtle text-success border border-success border-opacity-25 ms-1" style="font-size: 0.65rem;"><i class="fa-solid fa-house-chimney me-1"></i>Doorstep</span>` 
+                            : '';
+
                         cardsHtml += `
                             <div class="stop-sequence-card p-3 mb-2 rounded-3 border border-light shadow-sm" data-stop-type="${isDelivery ? 'delivery' : 'pickup'}" data-parcel-id="${stop.parcel_id || ''}" data-lat="${stop.lat}" data-lng="${stop.lng}">
                                 <div class="d-flex justify-content-between align-items-center mb-2">
@@ -307,9 +314,13 @@ document.addEventListener('DOMContentLoaded', function () {
                                         </span>
                                         <strong class="text-dark" style="font-size: 0.85rem;">${stop.tracking_id || ''}</strong>
                                     </div>
-                                    <span class="badge rounded-pill ${isDelivery ? 'bg-warning-subtle text-warning-emphasis border border-warning border-opacity-25' : 'bg-success-subtle text-success border border-success border-opacity-25'}" style="font-size: 0.65rem; font-weight: 700; text-transform: uppercase;">
-                                        ${typeLabel}
-                                    </span>
+                                    <div class="d-flex align-items-center gap-1">
+                                        ${manifestBadge}
+                                        ${doorstepBadge}
+                                        <span class="badge rounded-pill ${isDelivery ? 'bg-warning-subtle text-warning-emphasis border border-warning border-opacity-25' : 'bg-success-subtle text-success border border-success border-opacity-25'}" style="font-size: 0.65rem; font-weight: 700; text-transform: uppercase;">
+                                            ${typeLabel}
+                                        </span>
+                                    </div>
                                 </div>
 
                                 <div class="mb-2">
@@ -462,13 +473,11 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 
     // -------------------------------------------------------------
-    // 6. CANVAS SIGNATURE
+    // 6. CANVAS SIGNATURE (Multi-Modal Support)
     // -------------------------------------------------------------
-    const canvas = document.getElementById('signatureCanvas');
-    const signatureInput = document.getElementById('customer_signature_data');
-    const clearBtn = document.getElementById('clearSignature');
-    
-    if (canvas && signatureInput) {
+    document.querySelectorAll('.signature-canvas').forEach(canvas => {
+        const pId = canvas.getAttribute('data-parcel-id') || '';
+        const signatureInput = document.getElementById('customer_signature_data' + pId);
         const ctx = canvas.getContext('2d');
         let isDrawing = false;
         let lastX = 0;
@@ -499,7 +508,9 @@ document.addEventListener('DOMContentLoaded', function () {
             ctx.stroke();
             lastX = c.x;
             lastY = c.y;
-            signatureInput.value = canvas.toDataURL();
+            if (signatureInput) {
+                signatureInput.value = canvas.toDataURL();
+            }
         };
 
         const stopDraw = () => { isDrawing = false; };
@@ -512,15 +523,23 @@ document.addEventListener('DOMContentLoaded', function () {
         canvas.addEventListener('touchstart', startDraw, { passive: false });
         canvas.addEventListener('touchmove', drawMove, { passive: false });
         canvas.addEventListener('touchend', stopDraw);
+    });
 
-        if (clearBtn) {
-            clearBtn.addEventListener('click', (e) => {
-                e.preventDefault();
+    document.querySelectorAll('.clear-sig-btn').forEach(btn => {
+        btn.addEventListener('click', function(e) {
+            e.preventDefault();
+            const pId = this.getAttribute('data-parcel-id') || '';
+            const canvas = document.getElementById('signatureCanvas' + pId);
+            const signatureInput = document.getElementById('customer_signature_data' + pId);
+            if (canvas) {
+                const ctx = canvas.getContext('2d');
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
+            }
+            if (signatureInput) {
                 signatureInput.value = '';
-            });
-        }
-    }
+            }
+        });
+    });
 
     const fileInputs = document.querySelectorAll('.parcel-photo-input');
     fileInputs.forEach(input => {

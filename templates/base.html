@@ -227,6 +227,12 @@
                         <span>Dashboard</span>
                     </a>
                 </li>
+                <li class="sidebar-nav-item {% if active_page == 'driver_manifests' %}active{% endif %}">
+                    <a href="{{ url_for('driver_manifests') }}">
+                        <i class="fa-solid fa-truck-moving"></i>
+                        <span>My Manifests</span>
+                    </a>
+                </li>
                 <li class="sidebar-nav-item {% if active_page == 'driver_pickups' %}active{% endif %}">
                     <a href="{{ url_for('driver_pickups') }}">
                         <i class="fa-solid fa-boxes-packing"></i>

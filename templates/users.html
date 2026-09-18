@@ -5,121 +5,456 @@
 
 {% block content %}
 <div class="container-fluid p-0">
+    <!-- TOP HEADER -->
     <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 gap-3">
         <div>
-            <h3 class="fw-bold mb-1">System Users & Roles</h3>
-            <p class="text-muted mb-0">Manage accounts for Main Admin, Hub Admins, Dispatchers, Warehouse, and Staff.</p>
+            <h3 class="fw-bold mb-1">User & Role Management</h3>
+            <p class="text-muted mb-0">Unified administration for System Staff, Delivery Drivers/Couriers, and Regional Hub Admins.</p>
         </div>
-        <button class="btn btn-primary d-inline-flex align-items-center gap-2" data-bs-toggle="modal" data-bs-target="#addUserModal">
-            <i class="fa-solid fa-user-plus"></i>
-            <span>Create New User</span>
-        </button>
+        <div class="d-flex flex-wrap gap-2">
+            <button class="btn btn-primary d-inline-flex align-items-center gap-2" data-bs-toggle="modal" data-bs-target="#addUserModal">
+                <i class="fa-solid fa-user-plus"></i>
+                <span>Add Staff User</span>
+            </button>
+            <button class="btn btn-success d-inline-flex align-items-center gap-2" data-bs-toggle="modal" data-bs-target="#addDriverModal">
+                <i class="fa-solid fa-motorcycle"></i>
+                <span>Add Driver</span>
+            </button>
+            <button class="btn btn-dark d-inline-flex align-items-center gap-2" data-bs-toggle="modal" data-bs-target="#addHubAdminModal">
+                <i class="fa-solid fa-warehouse"></i>
+                <span>Assign Hub Admin</span>
+            </button>
+        </div>
     </div>
 
-    <!-- Users Table -->
-    <div class="card border-0 shadow-sm">
-        <div class="card-body p-4">
-            <div class="table-responsive">
-                <table class="table table-hover align-middle mb-0">
-                    <thead class="table-light">
-                        <tr>
-                            <th>User ID</th>
-                            <th>Username</th>
-                            <th>Role</th>
-                            <th>Permissions</th>
-                            <th>Linked Profile / Hub</th>
-                            <th class="text-end">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for u in users %}
-                        <tr>
-                            <td>#USR-{{ u.id }}</td>
-                            <td><strong class="text-dark">{{ u.username }}</strong></td>
-                            <td>
-                                {% if u.role == 'admin' %}
-                                    <span class="badge bg-danger bg-opacity-10 text-danger border border-danger">Main Admin</span>
-                                {% elif u.role == 'hub_admin' %}
-                                    <span class="badge bg-primary bg-opacity-10 text-primary border border-primary">Hub Admin</span>
-                                {% elif u.role == 'driver' %}
-                                    <span class="badge bg-success bg-opacity-10 text-success border border-success">Driver</span>
-                                {% else %}
-                                    <span class="badge bg-info bg-opacity-10 text-info border border-info">{{ u.role.replace('_', ' ').title() }}</span>
-                                {% endif %}
-                            </td>
-                            <td>
-                                <span class="badge bg-light text-dark border">{{ u.permissions or 'Default Role Access' }}</span>
-                            </td>
-                            <td>
-                                {% if u.hub_admin_profile %}
-                                    <i class="fa-solid fa-warehouse me-1 text-primary"></i>Hub Admin: {{ u.hub_admin_profile.hub.name }}
-                                {% elif u.driver_profile %}
-                                    <i class="fa-solid fa-motorcycle me-1 text-success"></i>Driver: {{ u.driver_profile.name }}
-                                {% else %}
-                                    <span class="text-muted">Global Access</span>
-                                {% endif %}
-                            </td>
-                            <td class="text-end">
-                                <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#editUserModal{{ u.id }}"><i class="fa-solid fa-pen"></i></button>
-                            </td>
-                        </tr>
+    <!-- METRICS CARDS -->
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-lg-3">
+            <div class="card border-0 shadow-sm rounded-4 p-3 h-100 bg-white">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <span class="text-muted small fw-semibold text-uppercase">Total System Accounts</span>
+                    <div class="rounded-circle bg-primary bg-opacity-10 text-primary d-flex align-items-center justify-content-center" style="width: 36px; height: 36px;">
+                        <i class="fa-solid fa-users"></i>
+                    </div>
+                </div>
+                <h3 class="fw-bold text-dark mb-0">{{ users | length }}</h3>
+                <small class="text-muted" style="font-size: 0.75rem;">Active credentials</small>
+            </div>
+        </div>
+        <div class="col-6 col-lg-3">
+            <div class="card border-0 shadow-sm rounded-4 p-3 h-100 bg-white">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <span class="text-muted small fw-semibold text-uppercase">Staff & Roles</span>
+                    <div class="rounded-circle bg-info bg-opacity-10 text-info d-flex align-items-center justify-content-center" style="width: 36px; height: 36px;">
+                        <i class="fa-solid fa-user-shield"></i>
+                    </div>
+                </div>
+                <h3 class="fw-bold text-info mb-0">{{ staff_users | length }}</h3>
+                <small class="text-muted" style="font-size: 0.75rem;">Admin, warehouse & dispatch</small>
+            </div>
+        </div>
+        <div class="col-6 col-lg-3">
+            <div class="card border-0 shadow-sm rounded-4 p-3 h-100 bg-white">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <span class="text-muted small fw-semibold text-uppercase">Drivers / Fleet</span>
+                    <div class="rounded-circle bg-success bg-opacity-10 text-success d-flex align-items-center justify-content-center" style="width: 36px; height: 36px;">
+                        <i class="fa-solid fa-motorcycle"></i>
+                    </div>
+                </div>
+                <h3 class="fw-bold text-success mb-0">{{ drivers | length }}</h3>
+                <small class="text-muted" style="font-size: 0.75rem;">Bike, Van, Pickup & Truck</small>
+            </div>
+        </div>
+        <div class="col-6 col-lg-3">
+            <div class="card border-0 shadow-sm rounded-4 p-3 h-100 bg-white">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <span class="text-muted small fw-semibold text-uppercase">Regional Hub Admins</span>
+                    <div class="rounded-circle bg-warning bg-opacity-10 text-warning d-flex align-items-center justify-content-center" style="width: 36px; height: 36px;">
+                        <i class="fa-solid fa-warehouse"></i>
+                    </div>
+                </div>
+                <h3 class="fw-bold text-warning-emphasis mb-0">{{ hub_admins | length }}</h3>
+                <small class="text-muted" style="font-size: 0.75rem;">Branch managers</small>
+            </div>
+        </div>
+    </div>
 
-                        <!-- Edit User Modal -->
-                        <div class="modal fade" id="editUserModal{{ u.id }}" tabindex="-1">
-                            <div class="modal-dialog modal-dialog-centered">
-                                <div class="modal-content border-0 shadow">
-                                    <form action="{{ url_for('edit_user', id=u.id) }}" method="POST">
-                                        <div class="modal-header">
-                                            <h5 class="modal-header-title fw-bold">Edit User Account {{ u.username }}</h5>
-                                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+    <!-- 3 MAIN TABS FOR USERS, DRIVERS, HUB ADMINS -->
+    <div class="card border-0 shadow-sm rounded-4 mb-4">
+        <div class="card-header bg-white border-0 pt-4 px-4 pb-0">
+            <ul class="nav nav-tabs card-header-tabs" id="userManagementTabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active fw-semibold pb-3 px-4 d-flex align-items-center gap-2" id="staff-tab" data-bs-toggle="tab" data-bs-target="#staff-pane" type="button" role="tab">
+                        <i class="fa-solid fa-user-shield text-primary"></i>
+                        <span>System Users & Staff</span>
+                        <span class="badge bg-primary-subtle text-primary rounded-pill">{{ staff_users | length }}</span>
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link fw-semibold pb-3 px-4 d-flex align-items-center gap-2" id="drivers-tab" data-bs-toggle="tab" data-bs-target="#drivers-pane" type="button" role="tab">
+                        <i class="fa-solid fa-motorcycle text-success"></i>
+                        <span>Drivers & Couriers</span>
+                        <span class="badge bg-success-subtle text-success rounded-pill">{{ drivers | length }}</span>
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link fw-semibold pb-3 px-4 d-flex align-items-center gap-2" id="hub-admins-tab" data-bs-toggle="tab" data-bs-target="#hub-admins-pane" type="button" role="tab">
+                        <i class="fa-solid fa-warehouse text-warning"></i>
+                        <span>Hub Admins & Branch Managers</span>
+                        <span class="badge bg-warning-subtle text-warning-emphasis rounded-pill">{{ hub_admins | length }}</span>
+                    </button>
+                </li>
+            </ul>
+        </div>
+
+        <div class="card-body p-4">
+            <div class="tab-content" id="userManagementTabsContent">
+                
+                <!-- ================= TAB 1: SYSTEM USERS & STAFF ================= -->
+                <div class="tab-pane fade show active" id="staff-pane" role="tabpanel">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h5 class="fw-bold mb-0 text-dark">Staff Accounts & Access Roles</h5>
+                        <input type="text" id="searchStaffInput" class="form-control form-control-sm w-auto" placeholder="Filter staff..." onkeyup="filterTable('staffTable', this.value)">
+                    </div>
+
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0" id="staffTable">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>User ID</th>
+                                    <th>Username</th>
+                                    <th>Role</th>
+                                    <th>Permissions</th>
+                                    <th>Scope / Type</th>
+                                    <th class="text-end">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for u in staff_users %}
+                                <tr>
+                                    <td><span class="text-muted">#USR-{{ u.id }}</span></td>
+                                    <td><strong class="text-dark">{{ u.username }}</strong></td>
+                                    <td>
+                                        {% if u.role == 'admin' %}
+                                            <span class="badge bg-danger bg-opacity-10 text-danger border border-danger">Main Admin</span>
+                                        {% elif u.role == 'booking_staff' %}
+                                            <span class="badge bg-primary bg-opacity-10 text-primary border border-primary">Booking Staff</span>
+                                        {% elif u.role == 'warehouse_staff' %}
+                                            <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary">Warehouse Staff</span>
+                                        {% elif u.role == 'dispatcher' %}
+                                            <span class="badge bg-info bg-opacity-10 text-info border border-info">Dispatcher</span>
+                                        {% elif u.role == 'delivery_staff' %}
+                                            <span class="badge bg-warning bg-opacity-10 text-warning-emphasis border border-warning">Delivery Staff</span>
+                                        {% elif u.role == 'customer' %}
+                                            <span class="badge bg-light text-dark border">Customer</span>
+                                        {% else %}
+                                            <span class="badge bg-dark bg-opacity-10 text-dark border">{{ u.role.replace('_', ' ').title() }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-light text-dark border">{{ u.permissions or 'view,create,edit,assign,dispatch' }}</span>
+                                    </td>
+                                    <td>
+                                        <span class="text-muted small"><i class="fa-solid fa-globe me-1"></i>System Wide</span>
+                                    </td>
+                                    <td class="text-end">
+                                        <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#editUserModal{{ u.id }}" title="Edit Permissions">
+                                            <i class="fa-solid fa-pen"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+
+                                <!-- Edit Staff User Modal -->
+                                <div class="modal fade" id="editUserModal{{ u.id }}" tabindex="-1">
+                                    <div class="modal-dialog modal-dialog-centered">
+                                        <div class="modal-content border-0 shadow">
+                                            <form action="{{ url_for('edit_user', id=u.id) }}" method="POST">
+                                                <div class="modal-header">
+                                                    <h5 class="modal-header-title fw-bold">Edit Account: {{ u.username }}</h5>
+                                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                                </div>
+                                                <div class="modal-body p-4">
+                                                    <div class="row g-3">
+                                                        <div class="col-6">
+                                                            <label class="form-label fw-semibold">Username</label>
+                                                            <input type="text" name="username" class="form-control" value="{{ u.username }}" required>
+                                                        </div>
+                                                        <div class="col-6">
+                                                            <label class="form-label fw-semibold">Role</label>
+                                                            <select name="role" class="form-select" required>
+                                                                <option value="admin" {% if u.role == 'admin' %}selected{% endif %}>Main Admin</option>
+                                                                <option value="booking_staff" {% if u.role == 'booking_staff' %}selected{% endif %}>Booking Staff</option>
+                                                                <option value="warehouse_staff" {% if u.role == 'warehouse_staff' %}selected{% endif %}>Warehouse Staff</option>
+                                                                <option value="dispatcher" {% if u.role == 'dispatcher' %}selected{% endif %}>Dispatcher</option>
+                                                                <option value="delivery_staff" {% if u.role == 'delivery_staff' %}selected{% endif %}>Delivery Staff</option>
+                                                                <option value="branch_staff" {% if u.role == 'branch_staff' %}selected{% endif %}>Branch Staff</option>
+                                                                <option value="hub_admin" {% if u.role == 'hub_admin' %}selected{% endif %}>Hub Admin</option>
+                                                                <option value="driver" {% if u.role == 'driver' %}selected{% endif %}>Driver</option>
+                                                            </select>
+                                                        </div>
+                                                        <div class="col-12">
+                                                            <label class="form-label fw-semibold">Reset Password (Optional)</label>
+                                                            <input type="password" name="password" class="form-control" placeholder="Leave blank to retain current password">
+                                                        </div>
+                                                        <div class="col-12">
+                                                            <label class="form-label fw-semibold">Permissions (Comma-separated)</label>
+                                                            <input type="text" name="permissions" class="form-control" value="{{ u.permissions or 'view,create,edit,assign,dispatch,reports' }}">
+                                                            <small class="text-muted">Options: view, create, edit, delete, assign, dispatch, reports, settings</small>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div class="modal-footer">
+                                                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                                                    <button type="submit" class="btn btn-primary">Save Changes</button>
+                                                </div>
+                                            </form>
                                         </div>
-                                        <div class="modal-body p-4">
-                                            <div class="row g-3">
-                                                <div class="col-6">
-                                                    <label class="form-label fw-semibold">Username</label>
-                                                    <input type="text" name="username" class="form-control" value="{{ u.username }}" required>
-                                                </div>
-                                                <div class="col-6">
-                                                    <label class="form-label fw-semibold">Role</label>
-                                                    <select name="role" class="form-select" required>
-                                                        <option value="admin" {% if u.role == 'admin' %}selected{% endif %}>Main Admin</option>
-                                                        <option value="hub_admin" {% if u.role == 'hub_admin' %}selected{% endif %}>Hub Admin</option>
-                                                        <option value="booking_staff" {% if u.role == 'booking_staff' %}selected{% endif %}>Booking Staff</option>
-                                                        <option value="warehouse_staff" {% if u.role == 'warehouse_staff' %}selected{% endif %}>Warehouse Staff</option>
-                                                        <option value="dispatcher" {% if u.role == 'dispatcher' %}selected{% endif %}>Dispatcher</option>
-                                                        <option value="delivery_staff" {% if u.role == 'delivery_staff' %}selected{% endif %}>Delivery Staff</option>
-                                                        <option value="branch_staff" {% if u.role == 'branch_staff' %}selected{% endif %}>Branch Staff</option>
-                                                        <option value="driver" {% if u.role == 'driver' %}selected{% endif %}>Driver</option>
-                                                    </select>
-                                                </div>
-                                                <div class="col-12">
-                                                    <label class="form-label fw-semibold">Reset Password (Optional)</label>
-                                                    <input type="password" name="password" class="form-control" placeholder="Leave blank to keep current password">
-                                                </div>
-                                                <div class="col-12">
-                                                    <label class="form-label fw-semibold">Permissions (Comma-separated)</label>
-                                                    <input type="text" name="permissions" class="form-control" value="{{ u.permissions or 'view,create,edit,assign,dispatch,reports' }}">
-                                                    <small class="text-muted">Options: view, create, edit, delete, assign, dispatch, reports, settings</small>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div class="modal-footer">
-                                            <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
-                                            <button type="submit" class="btn btn-primary">Save Changes</button>
-                                        </div>
-                                    </form>
+                                    </div>
                                 </div>
-                            </div>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- ================= TAB 2: DRIVERS & COURIERS ================= -->
+                <div class="tab-pane fade" id="drivers-pane" role="tabpanel">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h5 class="fw-bold mb-0 text-dark">Fleet Drivers & Couriers</h5>
+                        <div class="d-flex gap-2">
+                            <input type="text" id="searchDriversInput" class="form-control form-control-sm w-auto" placeholder="Filter drivers..." onkeyup="filterTable('driversTable', this.value)">
+                            <button class="btn btn-sm btn-success rounded-pill px-3" data-bs-toggle="modal" data-bs-target="#addDriverModal">
+                                <i class="fa-solid fa-plus me-1"></i>New Driver
+                            </button>
                         </div>
-                        {% endfor %}
-                    </tbody>
-                </table>
+                    </div>
+
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0" id="driversTable">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Driver ID</th>
+                                    <th>Name</th>
+                                    <th>User Account</th>
+                                    <th>License Category</th>
+                                    <th>Assigned Vehicle</th>
+                                    <th>Contact Phone</th>
+                                    <th>Deliveries</th>
+                                    <th>Status</th>
+                                    <th class="text-end">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for d in drivers %}
+                                <tr>
+                                    <td><span class="text-muted">#DRV-{{ d.id }}</span></td>
+                                    <td><strong class="text-dark">{{ d.name }}</strong></td>
+                                    <td>
+                                        {% if d.user %}
+                                            <span class="badge bg-light text-dark border"><i class="fa-solid fa-user me-1"></i>{{ d.user.username }}</span>
+                                        {% else %}
+                                            <span class="text-muted small">No Login</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% set ltype = d.license_type | lower if d.license_type else 'bike' %}
+                                        {% if 'bike' in ltype or 'two' in ltype %}
+                                            <span class="badge bg-success-subtle text-success border border-success"><i class="fa-solid fa-motorcycle me-1"></i>Bike License</span>
+                                        {% elif 'van' in ltype %}
+                                            <span class="badge bg-primary-subtle text-primary border border-primary"><i class="fa-solid fa-van-shuttle me-1"></i>Van License</span>
+                                        {% elif 'truck' in ltype or 'heavy' in ltype %}
+                                            <span class="badge bg-danger-subtle text-danger border border-danger"><i class="fa-solid fa-truck me-1"></i>Truck / Heavy</span>
+                                        {% else %}
+                                            <span class="badge bg-info-subtle text-info border border-info"><i class="fa-solid fa-id-card me-1"></i>{{ d.license_type or 'Standard' }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if d.vehicle_number %}
+                                            <strong class="text-dark"><i class="fa-solid fa-car-side text-secondary me-1"></i>{{ d.vehicle_number }}</strong>
+                                        {% else %}
+                                            <span class="text-muted small">Unassigned</span>
+                                        {% endif %}
+                                    </td>
+                                    <td><span class="text-dark">{{ d.phone }}</span></td>
+                                    <td><span class="badge bg-light text-dark border">{{ d.completed_deliveries or 0 }}</span></td>
+                                    <td>
+                                        {% if d.availability == 'Available' %}
+                                            <span class="badge bg-success rounded-pill">Available</span>
+                                        {% elif d.availability == 'On Delivery' %}
+                                            <span class="badge bg-primary rounded-pill">On Delivery</span>
+                                        {% elif d.availability == 'On Break' %}
+                                            <span class="badge bg-warning text-dark rounded-pill">On Break</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary rounded-pill">{{ d.availability }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end">
+                                        <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#editDriverModal{{ d.id }}" title="Edit Driver">
+                                            <i class="fa-solid fa-pen"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+
+                                <!-- Edit Driver Modal -->
+                                <div class="modal fade" id="editDriverModal{{ d.id }}" tabindex="-1">
+                                    <div class="modal-dialog modal-dialog-centered">
+                                        <div class="modal-content border-0 shadow">
+                                            <form action="{{ url_for('edit_driver', id=d.id) }}" method="POST">
+                                                <div class="modal-header">
+                                                    <h5 class="modal-header-title fw-bold">Edit Driver: {{ d.name }}</h5>
+                                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                                </div>
+                                                <div class="modal-body p-4">
+                                                    <div class="row g-3">
+                                                        <div class="col-12">
+                                                            <label class="form-label fw-semibold">Driver Full Name</label>
+                                                            <input type="text" name="name" class="form-control" value="{{ d.name }}" required>
+                                                        </div>
+                                                        <div class="col-6">
+                                                            <label class="form-label fw-semibold">Phone Number</label>
+                                                            <input type="text" name="phone" class="form-control" value="{{ d.phone }}" required>
+                                                        </div>
+                                                        <div class="col-6">
+                                                            <label class="form-label fw-semibold">License Category</label>
+                                                            <select name="license_type" class="form-select" required>
+                                                                <option value="Bike" {% if d.license_type == 'Bike' %}selected{% endif %}>Bike License (Two-Wheeler)</option>
+                                                                <option value="Van" {% if d.license_type == 'Van' %}selected{% endif %}>Van License (Light Vehicle)</option>
+                                                                <option value="Pickup" {% if d.license_type == 'Pickup' %}selected{% endif %}>Pickup License (Medium Cargo)</option>
+                                                                <option value="Truck" {% if d.license_type == 'Truck' %}selected{% endif %}>Truck / Heavy Transport</option>
+                                                            </select>
+                                                        </div>
+                                                        <div class="col-6">
+                                                            <label class="form-label fw-semibold">Assigned Vehicle Plate</label>
+                                                            <input type="text" name="vehicle_number" class="form-control" value="{{ d.vehicle_number or '' }}">
+                                                        </div>
+                                                        <div class="col-6">
+                                                            <label class="form-label fw-semibold">Availability Status</label>
+                                                            <select name="availability" class="form-select">
+                                                                <option value="Available" {% if d.availability == 'Available' %}selected{% endif %}>Available</option>
+                                                                <option value="On Delivery" {% if d.availability == 'On Delivery' %}selected{% endif %}>On Delivery</option>
+                                                                <option value="On Break" {% if d.availability == 'On Break' %}selected{% endif %}>On Break</option>
+                                                                <option value="Offline" {% if d.availability == 'Offline' %}selected{% endif %}>Offline</option>
+                                                            </select>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div class="modal-footer">
+                                                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                                                    <button type="submit" class="btn btn-primary">Save Changes</button>
+                                                </div>
+                                            </form>
+                                        </div>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- ================= TAB 3: HUB ADMINS & BRANCH MANAGERS ================= -->
+                <div class="tab-pane fade" id="hub-admins-pane" role="tabpanel">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h5 class="fw-bold mb-0 text-dark">Regional Hub Admins & Branch Supervisors</h5>
+                        <div class="d-flex gap-2">
+                            <input type="text" id="searchHubAdminsInput" class="form-control form-control-sm w-auto" placeholder="Filter hub admins..." onkeyup="filterTable('hubAdminsTable', this.value)">
+                            <button class="btn btn-sm btn-dark rounded-pill px-3" data-bs-toggle="modal" data-bs-target="#addHubAdminModal">
+                                <i class="fa-solid fa-plus me-1"></i>New Hub Admin
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0" id="hubAdminsTable">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Admin ID</th>
+                                    <th>Full Name</th>
+                                    <th>User Account</th>
+                                    <th>Assigned Regional Hub</th>
+                                    <th>Contact Phone</th>
+                                    <th>Status</th>
+                                    <th class="text-end">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for ha in hub_admins %}
+                                <tr>
+                                    <td><span class="text-muted">#HBA-{{ ha.id }}</span></td>
+                                    <td><strong class="text-dark">{{ ha.name }}</strong></td>
+                                    <td>
+                                        {% if ha.user %}
+                                            <span class="badge bg-light text-dark border"><i class="fa-solid fa-user-gear me-1"></i>{{ ha.user.username }}</span>
+                                        {% else %}
+                                            <span class="text-muted small">No Account</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if ha.hub %}
+                                            <strong class="text-primary"><i class="fa-solid fa-warehouse me-1"></i>{{ ha.hub.name }}</strong>
+                                            <small class="text-muted d-block">{{ ha.hub.city }} ({{ ha.hub.hub_code }})</small>
+                                        {% else %}
+                                            <span class="text-muted">Unassigned</span>
+                                        {% endif %}
+                                    </td>
+                                    <td><span class="text-dark">{{ ha.phone }}</span></td>
+                                    <td><span class="badge bg-success rounded-pill">Active</span></td>
+                                    <td class="text-end">
+                                        <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#editHubAdminModal{{ ha.id }}" title="Edit Hub Admin">
+                                            <i class="fa-solid fa-pen"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+
+                                <!-- Edit Hub Admin Modal -->
+                                <div class="modal fade" id="editHubAdminModal{{ ha.id }}" tabindex="-1">
+                                    <div class="modal-dialog modal-dialog-centered">
+                                        <div class="modal-content border-0 shadow">
+                                            <form action="{{ url_for('edit_hub_admin', id=ha.id) }}" method="POST">
+                                                <div class="modal-header">
+                                                    <h5 class="modal-header-title fw-bold">Edit Hub Admin: {{ ha.name }}</h5>
+                                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                                </div>
+                                                <div class="modal-body p-4">
+                                                    <div class="row g-3">
+                                                        <div class="col-12">
+                                                            <label class="form-label fw-semibold">Admin Full Name</label>
+                                                            <input type="text" name="name" class="form-control" value="{{ ha.name }}" required>
+                                                        </div>
+                                                        <div class="col-6">
+                                                            <label class="form-label fw-semibold">Contact Phone</label>
+                                                            <input type="text" name="phone" class="form-control" value="{{ ha.phone }}" required>
+                                                        </div>
+                                                        <div class="col-6">
+                                                            <label class="form-label fw-semibold">Assigned Regional Hub</label>
+                                                            <select name="hub_id" class="form-select" required>
+                                                                {% for h in hubs %}
+                                                                <option value="{{ h.id }}" {% if ha.hub_id == h.id %}selected{% endif %}>{{ h.name }} ({{ h.city }})</option>
+                                                                {% endfor %}
+                                                            </select>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div class="modal-footer">
+                                                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                                                    <button type="submit" class="btn btn-primary">Save Changes</button>
+                                                </div>
+                                            </form>
+                                        </div>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
             </div>
         </div>
     </div>
 </div>
 
-<!-- Add User Modal -->
+<!-- ================= MODAL: ADD STAFF USER ================= -->
 <div class="modal fade" id="addUserModal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content border-0 shadow">
@@ -138,8 +473,7 @@
                             <label class="form-label fw-semibold">Role</label>
                             <select name="role" class="form-select" required>
                                 <option value="admin">Main Admin</option>
-                                <option value="hub_admin">Hub Admin</option>
-                                <option value="booking_staff">Booking Staff</option>
+                                <option value="booking_staff" selected>Booking Staff</option>
                                 <option value="warehouse_staff">Warehouse Staff</option>
                                 <option value="dispatcher">Dispatcher</option>
                                 <option value="delivery_staff">Delivery Staff</option>
@@ -164,4 +498,119 @@
         </div>
     </div>
 </div>
+
+<!-- ================= MODAL: ADD DRIVER ================= -->
+<div class="modal fade" id="addDriverModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <form action="{{ url_for('add_driver') }}" method="POST">
+                <div class="modal-header">
+                    <h5 class="modal-header-title fw-bold">Register Fleet Driver & Courier</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <label class="form-label fw-semibold">Driver Full Name</label>
+                            <input type="text" name="name" class="form-control" placeholder="e.g. Binod Basnet" required>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label fw-semibold">Phone Number</label>
+                            <input type="text" name="phone" class="form-control" placeholder="98XXXXXXXX" required>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label fw-semibold">License Category</label>
+                            <select name="license_type" class="form-select" required>
+                                <option value="Bike" selected>Bike License (Two-Wheeler)</option>
+                                <option value="Van">Van License (Light Vehicle)</option>
+                                <option value="Pickup">Pickup License (Medium Cargo)</option>
+                                <option value="Truck">Truck / Heavy Transport</option>
+                            </select>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label fw-semibold">Login Username</label>
+                            <input type="text" name="username" class="form-control" placeholder="e.g. driver3" required>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label fw-semibold">Login Password</label>
+                            <input type="password" name="password" class="form-control" placeholder="Password" required>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label fw-semibold">Initial Vehicle Plate (Optional)</label>
+                            <input type="text" name="vehicle_number" class="form-control" placeholder="e.g. BA-2-PA-9988">
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-success">Register Driver</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- ================= MODAL: ADD HUB ADMIN ================= -->
+<div class="modal fade" id="addHubAdminModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <form action="{{ url_for('create_hub_admin') }}" method="POST">
+                <div class="modal-header">
+                    <h5 class="modal-header-title fw-bold">Assign Regional Hub Admin</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <label class="form-label fw-semibold">Admin Full Name</label>
+                            <input type="text" name="name" class="form-control" placeholder="e.g. Ramesh Karki" required>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label fw-semibold">Contact Phone</label>
+                            <input type="text" name="phone" class="form-control" placeholder="98XXXXXXXX" required>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label fw-semibold">Assigned Regional Hub</label>
+                            <select name="hub_id" class="form-select" required>
+                                {% for h in hubs %}
+                                <option value="{{ h.id }}">{{ h.name }} ({{ h.city }})</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label fw-semibold">Portal Username</label>
+                            <input type="text" name="username" class="form-control" placeholder="e.g. ktm_admin" required>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label fw-semibold">Portal Password</label>
+                            <input type="password" name="password" class="form-control" placeholder="Password" required>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-dark">Assign Hub Admin</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+function filterTable(tableId, query) {
+    const table = document.getElementById(tableId);
+    if (!table) return;
+    const rows = table.getElementsByTagName('tr');
+    const filter = query.toLowerCase();
+    
+    for (let i = 1; i < rows.length; i++) {
+        const text = rows[i].textContent.toLowerCase();
+        if (text.includes(filter)) {
+            rows[i].style.display = '';
+        } else {
+            rows[i].style.display = 'none';
+        }
+    }
+}
+</script>
 {% endblock %}

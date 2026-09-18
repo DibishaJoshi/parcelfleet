@@ -16,19 +16,27 @@
                 </span>
             </div>
             <p class="text-muted mb-0">
+                <span class="badge {% if manifest.is_home_delivery %}bg-success-subtle text-success border border-success{% else %}bg-primary-subtle text-primary border border-primary{% endif %} me-2">
+                    <i class="fa-solid {% if manifest.is_home_delivery %}fa-house-chimney{% else %}fa-truck-moving{% endif %} me-1"></i>
+                    {{ manifest.manifest_type or 'Inter-Hub Transfer' }}
+                </span>
                 <i class="fa-solid fa-route text-primary me-1"></i>Route: 
                 <strong>{{ manifest.origin_hub.name if manifest.origin_hub else 'N/A' }} Hub</strong> &rarr; 
-                <strong>{{ manifest.destination_hub.name if manifest.destination_hub else 'N/A' }} Hub</strong>
+                <strong>{{ manifest.destination_hub.name if manifest.destination_hub else ('Direct Customer Doorsteps' if manifest.is_home_delivery else 'N/A') }}</strong>
             </p>
         </div>
         <div class="d-flex gap-2">
             {% if manifest.manifest_status in ['Draft', 'Created'] %}
+                <button class="btn btn-outline-info rounded-pill px-3 d-inline-flex align-items-center gap-2" data-bs-toggle="modal" data-bs-target="#assignTransportModal">
+                    <i class="fa-solid fa-truck-ramp-box"></i>
+                    <span>Assign Transport</span>
+                </button>
                 <button class="btn btn-outline-primary rounded-pill px-3 d-inline-flex align-items-center gap-2" data-bs-toggle="modal" data-bs-target="#addParcelModal">
                     <i class="fa-solid fa-box"></i>
                     <span>Attach Parcel</span>
                 </button>
                 <form action="{{ url_for('dispatch_manifest', id=manifest.id) }}" method="POST" class="mb-0">
-                    <button type="submit" class="btn btn-warning rounded-pill px-4 d-inline-flex align-items-center gap-2 text-dark fw-semibold" {% if manifest.items|length == 0 %}disabled title="Attach at least 1 parcel before dispatch"{% endif %}>
+                    <button type="submit" class="btn btn-warning rounded-pill px-4 d-inline-flex align-items-center gap-2 text-dark fw-semibold" {% if manifest.items|length == 0 or not manifest.assigned_vehicle %}disabled title="{% if manifest.items|length == 0 %}Attach at least 1 parcel{% else %}Assign a driver & vehicle before dispatch{% endif %}"{% endif %}>
                         <i class="fa-solid fa-paper-plane"></i>
                         <span>Dispatch Manifest</span>
                     </button>
@@ -48,35 +56,51 @@
         </div>
     </div>
 
-    <!-- Overview KPI Cards -->
+    <!-- Overview KPI Cards with Capacity Utilization -->
     <div class="row g-3 mb-4">
         <div class="col-md-3">
             <div class="premium-card p-3 mb-0">
                 <span class="text-muted small d-block mb-1"><i class="fa-solid fa-boxes-stacked text-primary me-1"></i>Total Included Parcels</span>
                 <h4 class="fw-bold mb-0 text-primary">{{ manifest.total_parcels }}</h4>
+                <small class="text-muted">Volume: ~{{ manifest.total_volume_m3 }} m³</small>
             </div>
         </div>
         <div class="col-md-3">
             <div class="premium-card p-3 mb-0">
                 <span class="text-muted small d-block mb-1"><i class="fa-solid fa-weight-hanging text-info me-1"></i>Total Batch Weight</span>
                 <h4 class="fw-bold mb-0 text-info">{{ manifest.total_weight }} kg</h4>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="premium-card p-3 mb-0">
-                <span class="text-muted small d-block mb-1"><i class="fa-solid fa-user-tie text-success me-1"></i>Assigned Driver</span>
-                <h6 class="fw-bold mb-0 text-dark">{{ manifest.assigned_driver.name if manifest.assigned_driver else 'Unassigned' }}</h6>
-                {% if manifest.assigned_driver %}
-                <small class="text-muted">{{ manifest.assigned_driver.phone }}</small>
+                {% if manifest.assigned_vehicle %}
+                    {% set pct = (manifest.total_weight / manifest.assigned_vehicle.capacity_weight * 100)|round(1) if manifest.assigned_vehicle.capacity_weight > 0 else 0 %}
+                    <small class="text-muted">Load: <strong>{{ pct }}%</strong> of {{ manifest.assigned_vehicle.capacity_weight }}kg capacity</small>
+                {% else %}
+                    <small class="text-muted">Awaiting vehicle assignment</small>
                 {% endif %}
             </div>
         </div>
         <div class="col-md-3">
             <div class="premium-card p-3 mb-0">
-                <span class="text-muted small d-block mb-1"><i class="fa-solid fa-truck text-warning me-1"></i>Assigned Vehicle</span>
+                <span class="text-muted small d-block mb-1"><i class="fa-solid fa-user-tie text-success me-1"></i>Assigned Courier / Driver</span>
+                <h6 class="fw-bold mb-0 text-dark">{{ manifest.assigned_driver.name if manifest.assigned_driver else 'Unassigned' }}</h6>
+                {% if manifest.assigned_driver %}
+                <small class="text-muted">{{ manifest.assigned_driver.phone }} • {{ manifest.assigned_driver.employee_code }}</small>
+                {% else %}
+                <small class="text-warning">No driver paired</small>
+                {% endif %}
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="premium-card p-3 mb-0">
+                <span class="text-muted small d-block mb-1"><i class="fa-solid fa-truck text-warning me-1"></i>Assigned Vehicle & Capacity</span>
                 <h6 class="fw-bold mb-0 text-dark">{{ manifest.assigned_vehicle.vehicle_code if manifest.assigned_vehicle else 'Unassigned' }}</h6>
                 {% if manifest.assigned_vehicle %}
-                <small class="badge bg-light text-dark border">{{ manifest.assigned_vehicle.license_plate }} ({{ manifest.assigned_vehicle.vehicle_type }})</small>
+                <div class="d-flex align-items-center gap-1 mt-1">
+                    <span class="badge bg-light text-dark border">{{ manifest.assigned_vehicle.license_plate }}</span>
+                    <span class="badge {% if manifest.is_within_capacity %}bg-success-subtle text-success border-success{% else %}bg-danger text-white{% endif %}">
+                        Max {{ manifest.assigned_vehicle.capacity_weight }}kg
+                    </span>
+                </div>
+                {% else %}
+                <small class="text-warning">No vehicle assigned</small>
                 {% endif %}
             </div>
         </div>
@@ -218,6 +242,67 @@
 
 <!-- Attach Parcel Modal -->
 {% if manifest.manifest_status in ['Draft', 'Created'] %}
+<!-- Assign Transport Modal -->
+<div class="modal fade" id="assignTransportModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg" style="border-radius: 16px;">
+            <form action="{{ url_for('assign_transport_to_manifest', id=manifest.id) }}" method="POST">
+                <div class="modal-header border-bottom p-3 bg-light" style="border-radius: 16px 16px 0 0;">
+                    <h5 class="modal-title fw-bold text-dark"><i class="fa-solid fa-truck-ramp-box text-primary me-2"></i>Assign Driver & Vehicle</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <div class="alert alert-info py-2 px-3 small rounded-3 mb-3">
+                        <i class="fa-solid fa-info-circle me-1"></i>Manifest Requirements: <strong>{{ manifest.total_weight }} kg</strong> | <strong>~{{ manifest.total_volume_m3 }} m³</strong> ({{ manifest.total_parcels }} parcels)<br>
+                        <i class="fa-solid fa-id-card me-1 text-primary"></i><strong>License Rule:</strong> Bike license drivers drive Bikes, Van license drivers drive Vans.
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold text-dark">Select Available Courier / Driver</label>
+                        <select name="driver_id" id="manifestDriverSelect" class="form-select" required>
+                            <option value="">-- Choose Driver --</option>
+                            <optgroup label="Available Drivers (Ready for Dispatch)">
+                            {% for d in available_drivers %}
+                                <option value="{{ d.id }}" data-license="{{ d.license_type or 'Bike' }}" {% if manifest.assigned_driver_id == d.id %}selected{% endif %}>
+                                    {{ d.name }} - {{ d.vehicle_type_name }} [Cap: {{ d.effective_capacity_weight }}kg | License: {{ d.license_type or 'Bike' }}] ({{ d.phone }})
+                                </option>
+                            {% endfor %}
+                            </optgroup>
+                            {% if manifest.assigned_driver and manifest.assigned_driver.availability != 'Available' %}
+                            <optgroup label="Currently Assigned Driver">
+                                <option value="{{ manifest.assigned_driver.id }}" data-license="{{ manifest.assigned_driver.license_type or 'Bike' }}" selected>{{ manifest.assigned_driver.name }} - {{ manifest.assigned_driver.vehicle_type_name }} [Cap: {{ manifest.assigned_driver.effective_capacity_weight }}kg | License: {{ manifest.assigned_driver.license_type or 'Bike' }}] ({{ manifest.assigned_driver.availability }})</option>
+                            </optgroup>
+                            {% endif %}
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold text-dark">Select Vehicle (Capacity & License Checked)</label>
+                        <select name="vehicle_id" id="manifestVehicleSelect" class="form-select" required>
+                            <option value="">-- Choose Vehicle --</option>
+                            {% for v in available_vehicles %}
+                                {% set is_fit = (v.capacity_weight >= manifest.total_weight and v.capacity_volume >= manifest.total_volume_m3) %}
+                                <option value="{{ v.id }}" data-type="{{ v.vehicle_type }}" {% if manifest.assigned_vehicle_id == v.id %}selected{% endif %} {% if not is_fit %}class="text-danger"{% endif %}>
+                                    {{ v.vehicle_code }} - {{ v.license_plate }} [{{ v.vehicle_type }}] (Max: {{ v.capacity_weight }}kg, {{ v.capacity_volume }}m³){% if not is_fit %} - INSUFFICIENT CAPACITY{% endif %}
+                                </option>
+                            {% endfor %}
+                            {% if manifest.assigned_vehicle and manifest.assigned_vehicle.current_status != 'Available' %}
+                                <option value="{{ manifest.assigned_vehicle.id }}" data-type="{{ manifest.assigned_vehicle.vehicle_type }}" selected>{{ manifest.assigned_vehicle.vehicle_code }} - {{ manifest.assigned_vehicle.license_plate }} [{{ manifest.assigned_vehicle.vehicle_type }}] (Currently Assigned)</option>
+                            {% endif %}
+                        </select>
+                        <div class="form-text small">Only vehicles matching the driver's license with payload capacity &ge; {{ manifest.total_weight }} kg can be selected.</div>
+                    </div>
+                </div>
+                <div class="modal-footer border-top p-3">
+                    <button type="button" class="btn btn-light rounded-pill px-3" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary rounded-pill px-4">Save & Assign Transport</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Attach Parcel Modal -->
 <div class="modal fade" id="addParcelModal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content border-0 shadow-lg" style="border-radius: 16px;">
@@ -344,6 +429,51 @@ document.addEventListener('DOMContentLoaded', function() {
 
     pollTelemetry();
     setInterval(pollTelemetry, 10000);
+
+    // Dynamic License & Vehicle Matching in Manifest Assign Modal
+    const mnfDriverSelect = document.getElementById('manifestDriverSelect');
+    const mnfVehicleSelect = document.getElementById('manifestVehicleSelect');
+
+    if (mnfDriverSelect && mnfVehicleSelect) {
+        const vehicleOptions = Array.from(mnfVehicleSelect.options);
+
+        function filterManifestVehicles() {
+            const selectedOpt = mnfDriverSelect.options[mnfDriverSelect.selectedIndex];
+            const license = selectedOpt ? (selectedOpt.dataset.license || '').toLowerCase() : '';
+
+            vehicleOptions.forEach(opt => {
+                if (!opt.value) {
+                    opt.style.display = 'block';
+                    opt.disabled = false;
+                    return;
+                }
+                const vType = (opt.dataset.type || '').toLowerCase();
+                let match = false;
+                if (!license) {
+                    match = true;
+                } else if (license.includes('bike') && vType.includes('bike')) {
+                    match = true;
+                } else if (license.includes('van') && vType.includes('van')) {
+                    match = true;
+                } else if (license.includes('pickup') && vType.includes('pickup')) {
+                    match = true;
+                } else if (license.includes('truck') && vType.includes('truck')) {
+                    match = true;
+                }
+
+                if (match) {
+                    opt.style.display = 'block';
+                    opt.disabled = false;
+                } else {
+                    opt.style.display = 'none';
+                    opt.disabled = true;
+                }
+            });
+        }
+
+        mnfDriverSelect.addEventListener('change', filterManifestVehicles);
+        filterManifestVehicles();
+    }
 });
 </script>
 {% endblock %}

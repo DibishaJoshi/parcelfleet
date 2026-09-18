@@ -17,6 +17,7 @@
     </div>
 
     <!-- Manifests Table -->
+    <!-- Manifests Table -->
     <div class="card border-0 shadow-sm">
         <div class="card-body p-4">
             <div class="table-responsive">
@@ -24,11 +25,12 @@
                     <thead class="table-light">
                         <tr>
                             <th>Manifest Number</th>
+                            <th>Delivery Mode</th>
                             <th>Route</th>
                             <th>Origin Hub</th>
-                            <th>Destination Hub</th>
-                            <th>Parcels</th>
-                            <th>Total Weight</th>
+                            <th>Destination / Scope</th>
+                            <th>Parcels & Load</th>
+                            <th>Assigned Transport</th>
                             <th>Status</th>
                             <th class="text-end">Actions</th>
                         </tr>
@@ -37,18 +39,50 @@
                         {% for m in manifests %}
                         <tr>
                             <td><strong class="text-primary">{{ m.manifest_number }}</strong></td>
-                            <td>{{ m.route or 'Standard Inter-Hub Route' }}</td>
+                            <td>
+                                {% if m.is_home_delivery %}
+                                    <span class="badge bg-success-subtle text-success border border-success"><i class="fa-solid fa-house-chimney me-1"></i>Hub &rarr; Home Delivery</span>
+                                {% else %}
+                                    <span class="badge bg-primary-subtle text-primary border border-primary"><i class="fa-solid fa-truck-moving me-1"></i>Inter-Hub Transfer</span>
+                                {% endif %}
+                            </td>
+                            <td><small class="text-dark fw-semibold">{{ m.route or 'Standard Route' }}</small></td>
                             <td><span class="badge bg-light text-dark border">{{ m.origin_hub.name if m.origin_hub else 'N/A' }}</span></td>
-                            <td><span class="badge bg-light text-dark border">{{ m.destination_hub.name if m.destination_hub else 'N/A' }}</span></td>
-                            <td><strong>{{ m.total_parcels }}</strong> parcels</td>
-                            <td><strong>{{ m.total_weight }}</strong> kg</td>
+                            <td>
+                                {% if m.is_home_delivery %}
+                                    <span class="text-success small fw-semibold"><i class="fa-solid fa-location-crosshairs me-1"></i>Direct Doorsteps</span>
+                                {% else %}
+                                    <span class="badge bg-light text-dark border">{{ m.destination_hub.name if m.destination_hub else 'N/A' }}</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <strong>{{ m.total_parcels }}</strong> parcels<br>
+                                <span class="badge bg-info-subtle text-info border-0">{{ m.total_weight }} kg</span>
+                                <span class="badge bg-light text-muted border-0">~{{ m.total_volume_m3 }} m³</span>
+                                {% if m.is_home_delivery and m.items %}
+                                    <div class="progress mt-1" style="height: 5px;" title="Delivered: {{ m.delivered_items_count }}/{{ m.items|length }}">
+                                        <div class="progress-bar bg-success" style="width: {{ m.delivery_progress_pct }}%;"></div>
+                                    </div>
+                                    <small class="text-muted" style="font-size: 0.7rem;">{{ m.delivered_items_count }}/{{ m.items|length }} delivered</small>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if m.assigned_driver %}
+                                    <div class="fw-semibold text-dark">{{ m.assigned_driver.name }}</div>
+                                    {% if m.assigned_vehicle %}
+                                        <small class="badge bg-light text-dark border">{{ m.assigned_vehicle.vehicle_code }} (Max {{ m.assigned_vehicle.capacity_weight }}kg)</small>
+                                    {% endif %}
+                                {% else %}
+                                    <span class="badge bg-secondary-subtle text-secondary">Unassigned</span>
+                                {% endif %}
+                            </td>
                             <td>
                                 {% if m.manifest_status == 'Draft' %}
                                     <span class="badge bg-secondary">Draft</span>
                                 {% elif m.manifest_status == 'Created' %}
                                     <span class="badge bg-info bg-opacity-10 text-info border border-info">Created</span>
-                                {% elif m.manifest_status == 'Dispatched' %}
-                                    <span class="badge bg-warning bg-opacity-10 text-warning border border-warning">Dispatched</span>
+                                {% elif m.manifest_status == 'Dispatched' or m.manifest_status == 'In Transit' %}
+                                    <span class="badge bg-warning bg-opacity-10 text-warning border border-warning">In Transit</span>
                                 {% elif m.manifest_status == 'Completed' %}
                                     <span class="badge bg-success bg-opacity-10 text-success border border-success">Completed</span>
                                 {% else %}
@@ -61,7 +95,7 @@
                         </tr>
                         {% else %}
                         <tr>
-                            <td colspan="8" class="text-center py-4 text-muted">No manifest batches created yet.</td>
+                            <td colspan="9" class="text-center py-4 text-muted">No manifest batches created yet.</td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -82,25 +116,34 @@
                 </div>
                 <div class="modal-body p-4">
                     <div class="row g-3">
+                        <div class="col-12">
+                            <label class="form-label fw-semibold">Manifest Delivery Mode</label>
+                            <select name="manifest_type" id="manifestTypeSelect" class="form-select" onchange="toggleManifestDest(this.value)" required>
+                                <option value="Inter-Hub Transfer">Inter-Hub Transfer (Hub to Hub Bulk Freight)</option>
+                                <option value="Hub to Home Delivery">Hub to Home Delivery (Direct Doorsteps Run)</option>
+                            </select>
+                            <small class="text-muted" id="manifestTypeHelp">For moving bulk cargo from one sorting facility/hub to another.</small>
+                        </div>
                         <div class="col-6">
-                            <label class="form-label fw-semibold">Origin Hub</label>
+                            <label class="form-label fw-semibold">Origin Dispatch Hub</label>
                             <select name="origin_hub_id" class="form-select" required>
                                 {% for h in hubs %}
-                                    <option value="{{ h.id }}">{{ h.name }}</option>
+                                    <option value="{{ h.id }}">{{ h.name }} ({{ h.city }})</option>
                                 {% endfor %}
                             </select>
                         </div>
-                        <div class="col-6">
+                        <div class="col-6" id="destHubContainer">
                             <label class="form-label fw-semibold">Destination Hub</label>
-                            <select name="destination_hub_id" class="form-select" required>
+                            <select name="destination_hub_id" id="destinationHubSelect" class="form-select">
+                                <option value="">-- Select Destination Hub --</option>
                                 {% for h in hubs %}
-                                    <option value="{{ h.id }}">{{ h.name }}</option>
+                                    <option value="{{ h.id }}">{{ h.name }} ({{ h.city }})</option>
                                 {% endfor %}
                             </select>
                         </div>
                         <div class="col-12">
-                            <label class="form-label fw-semibold">Route Description</label>
-                            <input type="text" name="route" class="form-control" placeholder="e.g. Kalanki -> Thamel Highway Route">
+                            <label class="form-label fw-semibold">Route Title / Area Description (Optional)</label>
+                            <input type="text" name="route" class="form-control" placeholder="e.g. Kalanki Hub -> Koteshwor Doorstep Run">
                         </div>
                     </div>
                 </div>
@@ -112,4 +155,18 @@
         </div>
     </div>
 </div>
+
+<script>
+function toggleManifestDest(val) {
+    const destContainer = document.getElementById('destHubContainer');
+    const help = document.getElementById('manifestTypeHelp');
+    if (val === 'Hub to Home Delivery') {
+        if (destContainer) destContainer.style.opacity = '0.5';
+        if (help) help.textContent = 'For last-mile delivery drivers delivering parcels directly to individual customer homes.';
+    } else {
+        if (destContainer) destContainer.style.opacity = '1';
+        if (help) help.textContent = 'For moving bulk cargo from one sorting facility/hub to another.';
+    }
+}
+</script>
 {% endblock %}

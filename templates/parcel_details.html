@@ -177,12 +177,23 @@
                     <label class="form-label fw-semibold" style="font-size: 0.8rem;">Change/Assign Courier Driver</label>
                     <div class="input-group">
                         <select class="form-select" name="driver_id" required>
-                            <option value="">-- Select Active Driver --</option>
-                            {% for d in drivers %}
-                            <option value="{{ d.id }}" {% if parcel.assigned_driver_id == d.id %}selected{% endif %}>
-                                {{ d.name }} - {{ d.vehicle_number }} ({{ d.availability }})
-                            </option>
-                            {% endfor %}
+                            <option value="">-- Select Courier / Driver --</option>
+                            <optgroup label="Available Drivers (Ready for Dispatch)">
+                                {% for d in drivers if d.availability == 'Available' %}
+                                {% set cap_ok = (d.effective_capacity_weight >= parcel.weight) %}
+                                <option value="{{ d.id }}" {% if parcel.assigned_driver_id == d.id %}selected{% endif %}>
+                                    {{ d.name }} - {{ d.vehicle_type_name }} [Cap: {{ d.effective_capacity_weight }}kg] ({{ d.vehicle_number or 'No Plate' }}){% if not cap_ok %} - ⚠️ Weight exceeds cap ({{ parcel.weight }}kg){% endif %}
+                                </option>
+                                {% endfor %}
+                            </optgroup>
+                            <optgroup label="Busy / Offline Drivers">
+                                {% for d in drivers if d.availability != 'Available' %}
+                                {% set cap_ok = (d.effective_capacity_weight >= parcel.weight) %}
+                                <option value="{{ d.id }}" {% if parcel.assigned_driver_id == d.id %}selected{% endif %}>
+                                    {{ d.name }} - {{ d.vehicle_type_name }} [Cap: {{ d.effective_capacity_weight }}kg] ({{ d.availability }}){% if not cap_ok %} - ⚠️ Weight exceeds cap{% endif %}
+                                </option>
+                                {% endfor %}
+                            </optgroup>
                         </select>
                         <button type="submit" class="btn btn-primary" style="background-color: var(--primary-color); border: none;">Assign</button>
                     </div>
@@ -403,9 +414,20 @@
                             <label for="assigned_driver_id_edit" class="form-label fw-semibold">Assigned Courier Driver</label>
                             <select class="form-select" name="assigned_driver_id" id="assigned_driver_id_edit">
                                 <option value="">-- Manual Assign Driver --</option>
-                                {% for d in drivers %}
-                                <option value="{{ d.id }}" {% if parcel.assigned_driver_id == d.id %}selected{% endif %}>{{ d.name }} - {{ d.vehicle_number }} ({{ d.availability }})</option>
-                                {% endfor %}
+                                <optgroup label="Available Drivers (Ready for Dispatch)">
+                                    {% for d in drivers if d.availability == 'Available' %}
+                                    <option value="{{ d.id }}" {% if parcel.assigned_driver_id == d.id %}selected{% endif %}>
+                                        {{ d.name }} - {{ d.vehicle_type_name }} [Cap: {{ d.effective_capacity_weight }}kg] (Available)
+                                    </option>
+                                    {% endfor %}
+                                </optgroup>
+                                <optgroup label="Busy / Offline Drivers">
+                                    {% for d in drivers if d.availability != 'Available' %}
+                                    <option value="{{ d.id }}" {% if parcel.assigned_driver_id == d.id %}selected{% endif %}>
+                                        {{ d.name }} - {{ d.vehicle_type_name }} [Cap: {{ d.effective_capacity_weight }}kg] ({{ d.availability }})
+                                    </option>
+                                    {% endfor %}
+                                </optgroup>
                             </select>
                         </div>
                     </div>
