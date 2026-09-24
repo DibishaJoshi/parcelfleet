@@ -151,17 +151,35 @@
             <div class="alert alert-danger mb-0" role="alert">
                 <i class="fas fa-triangle-exclamation me-2"></i>This order is Cancelled. Driver dispatch is disabled.
             </div>
+            {% elif parcel.status == 'Delivered' %}
+            <div class="text-dark">
+                {% if parcel.effective_driver %}
+                <div class="d-flex align-items-center gap-3 mb-3">
+                    <div class="bg-success-subtle text-success rounded-circle d-flex align-items-center justify-content-center" style="width: 48px; height: 48px; font-size: 1.25rem;">
+                        <i class="fas fa-check-double"></i>
+                    </div>
+                    <div>
+                        <h6 class="fw-bold mb-0 text-success">{{ parcel.effective_driver.name }}</h6>
+                        <small class="text-muted d-block">Vehicle: {{ parcel.effective_vehicle.license_plate if parcel.effective_vehicle else (parcel.effective_driver.vehicle_number or 'N/A') }} [{{ parcel.effective_driver.vehicle_type_name }}]</small>
+                        <small class="text-muted d-block">Contact: {{ parcel.effective_driver.phone or 'N/A' }}</small>
+                    </div>
+                </div>
+                {% endif %}
+                <div class="alert alert-success mb-0 py-2 px-3 small rounded-3" role="alert">
+                    <i class="fas fa-circle-check me-2 text-success"></i>This parcel has been <strong>Delivered</strong> successfully. Driver dispatch is completed.
+                </div>
+            </div>
             {% else %}
             <div class="text-dark mb-3">
-                {% if parcel.assigned_driver %}
+                {% if parcel.effective_driver %}
                 <div class="d-flex align-items-center gap-3">
                     <div class="bg-primary-subtle text-primary rounded-circle d-flex align-items-center justify-content-center" style="width: 48px; height: 48px; font-size: 1.25rem;">
                         <i class="fas fa-motorcycle"></i>
                     </div>
                     <div>
-                        <h6 class="fw-bold mb-0">{{ parcel.assigned_driver.name }}</h6>
-                        <small class="text-muted d-block">Vehicle Plate: {{ parcel.assigned_driver.vehicle_number }}</small>
-                        <small class="text-muted d-block">Phone: {{ parcel.assigned_driver.phone }}</small>
+                        <h6 class="fw-bold mb-0">{{ parcel.effective_driver.name }}</h6>
+                        <small class="text-muted d-block">Vehicle Plate: {{ parcel.effective_vehicle.license_plate if parcel.effective_vehicle else (parcel.effective_driver.vehicle_number or 'N/A') }} [{{ parcel.effective_driver.vehicle_type_name }}]</small>
+                        <small class="text-muted d-block">Phone: {{ parcel.effective_driver.phone or 'N/A' }}</small>
                     </div>
                 </div>
                 {% else %}
@@ -171,7 +189,7 @@
                 {% endif %}
             </div>
 
-            <!-- MANUAL DISPATCH OVERRIDE FORM -->
+            <!-- MANUAL DISPATCH OVERRIDE FORM (Active Only) -->
             <form method="POST" action="{{ url_for('assign_driver_manual', id=parcel.id) }}" class="no-print">
                 <div class="mb-3">
                     <label class="form-label fw-semibold" style="font-size: 0.8rem;">Change/Assign Courier Driver</label>

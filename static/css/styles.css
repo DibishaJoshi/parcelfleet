@@ -1075,3 +1075,33 @@ h1, h2, h3, h4, h5, h6 {
 .stop-pickup {
     background: linear-gradient(135deg, #10B981 0%, #059669 100%) !important;
 }
+
+/* Universal Table Pagination Styles */
+.pagination-sm .page-link {
+    padding: 0.35rem 0.65rem;
+    font-size: 0.8rem;
+    border-radius: 6px;
+    margin: 0 2px;
+    color: var(--text-color, #1E293B);
+    background-color: var(--card-bg, #FFFFFF);
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    transition: all 0.15s ease;
+}
+
+.pagination-sm .page-item.active .page-link {
+    background-color: var(--primary-color, #4F46E5) !important;
+    border-color: var(--primary-color, #4F46E5) !important;
+    color: #FFFFFF !important;
+    font-weight: 600;
+}
+
+.pagination-sm .page-item.disabled .page-link {
+    opacity: 0.45;
+    background-color: transparent;
+    cursor: not-allowed;
+}
+
+.pagination-sm .page-link:hover:not(.disabled) {
+    background-color: rgba(79, 70, 229, 0.08);
+    color: var(--primary-color, #4F46E5);
+}

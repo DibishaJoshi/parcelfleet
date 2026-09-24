@@ -1531,7 +1531,7 @@ def assign_driver_manual(id):
             db.session.add(notif)
             db.session.commit()
             
-            flash(f"Driver {driver.name} ({vehicle.vehicle_type if vehicle else 'Bike'}) assigned to {parcel.tracking_id} successfully!", "success")
+            flash(f"Driver {driver.name} ({v_type}) assigned to {parcel.tracking_id} successfully!", "success")
             
     return redirect(request.referrer or url_for('manage_parcels'))
 
@@ -2607,23 +2607,39 @@ def api_admin_analytics():
         
     status_counts = {}
     for p in parcels:
-        status_counts[p.status] = status_counts.get(p.status, 0) + 1
+        st = str(p.status) if p.status else 'Unknown'
+        status_counts[st] = status_counts.get(st, 0) + 1
         
     hub_dist = {}
     for p in parcels:
-        hub_dist[p.pickup_hub] = hub_dist.get(p.pickup_hub, 0) + 1
+        hb = str(p.pickup_hub) if p.pickup_hub else 'Unassigned'
+        hub_dist[hb] = hub_dist.get(hb, 0) + 1
         
     drivers = Driver.query.all()
     driver_stats = [{
-        'name': d.name,
-        'completed': d.completed_deliveries,
-        'status': d.availability
+        'name': d.name or 'Unknown',
+        'completed': d.completed_deliveries or 0,
+        'status': d.availability or 'Available'
     } for d in drivers]
     
+    # Calculate simple monthly trends
+    monthly_counts = {}
+    for p in parcels:
+        if p.created_at:
+            m_key = p.created_at.strftime('%b %Y')
+            monthly_counts[m_key] = monthly_counts.get(m_key, 0) + 1
+    
+    if not monthly_counts:
+        monthly_counts = {'Current': len(parcels)}
+        
     return jsonify({
         'status_counts': status_counts,
         'hub_distribution': hub_dist,
-        'driver_stats': driver_stats
+        'driver_stats': driver_stats,
+        'monthly_trends': {
+            'labels': list(monthly_counts.keys()),
+            'counts': list(monthly_counts.values())
+        }
     })
 
 @app.route('/api/admin/drivers-location')

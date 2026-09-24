@@ -360,6 +360,25 @@ class Parcel(db.Model):
         """Volume in cubic meters (m3), computed from dimensions in cm."""
         return (self.length * self.width * self.height) / 1000000.0
 
+    @property
+    def effective_driver(self):
+        """Returns direct assigned driver, or falls back to parent manifest assigned driver."""
+        if self.assigned_driver:
+            return self.assigned_driver
+        if self.manifest and self.manifest.assigned_driver:
+            return self.manifest.assigned_driver
+        return None
+
+    @property
+    def effective_vehicle(self):
+        """Returns assigned driver vehicle, or falls back to parent manifest vehicle."""
+        driver = self.effective_driver
+        if driver and driver.assigned_vehicle:
+            return driver.assigned_vehicle
+        if self.manifest and self.manifest.assigned_vehicle:
+            return self.manifest.assigned_vehicle
+        return None
+
 class TrackingHistory(db.Model):
     __tablename__ = 'tracking_history'
     

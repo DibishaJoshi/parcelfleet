@@ -142,76 +142,236 @@ document.addEventListener('DOMContentLoaded', function () {
             });
     }
 
-    // Dynamic Filter & Search Table Controller
-    const searchInput = document.getElementById('tableSearch');
-    const statusFilter = document.getElementById('filterStatus');
-    const paymentFilter = document.getElementById('filterPayment');
-    const tableRows = document.querySelectorAll('.premium-table tbody tr');
+    // Universal Table Pagination & Live Filter Controller
+    function initTablePagination() {
+        const tables = document.querySelectorAll('.table-responsive table.premium-table, .table-responsive table.table');
+        
+        tables.forEach((table, tableIndex) => {
+            const tbody = table.querySelector('tbody');
+            if (!tbody) return;
+            
+            // Skip modal tables or explicitly exempt tables
+            if (table.closest('.modal-body') || table.classList.contains('no-paginate')) return;
+            
+            const rawRows = Array.from(tbody.querySelectorAll('tr'));
+            const dataRows = rawRows.filter(r => !r.querySelector('td[colspan]'));
+            if (dataRows.length === 0) return;
 
-    if (searchInput || statusFilter || paymentFilter) {
-        const filterTable = () => {
-            const query = searchInput ? searchInput.value.toLowerCase() : '';
-            const statusVal = statusFilter ? statusFilter.value.toLowerCase() : '';
-            const paymentVal = paymentFilter ? paymentFilter.value.toLowerCase() : '';
+            let currentPage = 1;
+            let rowsPerPage = 10;
+            let filteredRows = [...dataRows];
 
-            tableRows.forEach(row => {
-                let textMatch = false;
-                let statusMatch = false;
-                let paymentMatch = false;
+            const tableWrapper = table.closest('.table-responsive') || table.parentElement;
+            let paginationContainer = tableWrapper.parentElement.querySelector(`.pagination-bar-${tableIndex}`);
+            if (!paginationContainer) {
+                paginationContainer = document.createElement('div');
+                paginationContainer.className = `d-flex flex-wrap align-items-center justify-content-between gap-3 mt-3 pt-3 border-top pagination-bar-${tableIndex} no-print`;
+                paginationContainer.style.fontSize = '0.85rem';
+                tableWrapper.after(paginationContainer);
+            }
 
-                // 1. Text search columns: Tracking ID, Sender, Receiver, Phone
-                const rowText = row.innerText.toLowerCase();
-                if (rowText.includes(query)) {
-                    textMatch = true;
+            function renderPagination() {
+                const totalFiltered = filteredRows.length;
+                const totalPages = Math.ceil(totalFiltered / rowsPerPage) || 1;
+                if (currentPage > totalPages) currentPage = totalPages;
+                if (currentPage < 1) currentPage = 1;
+
+                const startIdx = (currentPage - 1) * rowsPerPage;
+                const endIdx = Math.min(startIdx + rowsPerPage, totalFiltered);
+
+                // Hide all data rows
+                dataRows.forEach(r => r.style.display = 'none');
+
+                // Show active page slice
+                for (let i = startIdx; i < endIdx; i++) {
+                    if (filteredRows[i]) filteredRows[i].style.display = '';
                 }
 
-                // 2. Status Match
-                const rowStatusAttr = row.getAttribute('data-status') || '';
-                if (!statusVal || rowStatusAttr.toLowerCase() === statusVal) {
-                    statusMatch = true;
+                // Handle 0 search results message
+                let emptyRow = tbody.querySelector('.pagination-empty-row');
+                if (totalFiltered === 0) {
+                    if (!emptyRow) {
+                        emptyRow = document.createElement('tr');
+                        emptyRow.className = 'pagination-empty-row';
+                        const colCount = table.querySelectorAll('thead th').length || 7;
+                        emptyRow.innerHTML = `<td colspan="${colCount}" class="text-center text-muted py-4"><i class="fas fa-search me-2"></i>No matching records found.</td>`;
+                        tbody.appendChild(emptyRow);
+                    }
+                    emptyRow.style.display = '';
+                } else if (emptyRow) {
+                    emptyRow.style.display = 'none';
                 }
 
-                // 3. Payment Match
-                const rowPaymentAttr = row.getAttribute('data-payment') || '';
-                if (!paymentVal || rowPaymentAttr.toLowerCase() === paymentVal) {
-                    paymentMatch = true;
+                const showingStart = totalFiltered === 0 ? 0 : startIdx + 1;
+                const showingEnd = endIdx;
+                const filterNote = totalFiltered !== dataRows.length ? ` <span class="text-muted small">(filtered from ${dataRows.length} total)</span>` : '';
+
+                // Build page buttons HTML
+                let buttonsHtml = '';
+                
+                // Prev button
+                buttonsHtml += `<li class="page-item ${currentPage === 1 ? 'disabled' : ''}">
+                    <button class="page-link btn-prev" ${currentPage === 1 ? 'disabled' : ''} aria-label="Previous">
+                        <i class="fas fa-chevron-left" style="font-size: 0.75rem;"></i>
+                    </button>
+                </li>`;
+
+                // Smart sliding page buttons
+                let startPage = Math.max(1, currentPage - 2);
+                let endPage = Math.min(totalPages, currentPage + 2);
+
+                if (startPage > 1) {
+                    buttonsHtml += `<li class="page-item"><button class="page-link page-num" data-page="1">1</button></li>`;
+                    if (startPage > 2) buttonsHtml += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
                 }
 
-                if (textMatch && statusMatch && paymentMatch) {
-                    row.style.display = '';
-                } else {
-                    row.style.display = 'none';
+                for (let p = startPage; p <= endPage; p++) {
+                    buttonsHtml += `<li class="page-item ${p === currentPage ? 'active' : ''}">
+                        <button class="page-link page-num" data-page="${p}">${p}</button>
+                    </li>`;
                 }
-            });
-        };
 
-        if (searchInput) searchInput.addEventListener('input', filterTable);
-        if (statusFilter) statusFilter.addEventListener('change', filterTable);
-        if (paymentFilter) paymentFilter.addEventListener('change', filterTable);
+                if (endPage < totalPages) {
+                    if (endPage < totalPages - 1) buttonsHtml += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
+                    buttonsHtml += `<li class="page-item"><button class="page-link page-num" data-page="${totalPages}">${totalPages}</button></li>`;
+                }
+
+                // Next button
+                buttonsHtml += `<li class="page-item ${currentPage === totalPages ? 'disabled' : ''}">
+                    <button class="page-link btn-next" ${currentPage === totalPages ? 'disabled' : ''} aria-label="Next">
+                        <i class="fas fa-chevron-right" style="font-size: 0.75rem;"></i>
+                    </button>
+                </li>`;
+
+                paginationContainer.innerHTML = `
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="text-muted">
+                            Showing <strong class="text-dark">${showingStart}</strong> to <strong class="text-dark">${showingEnd}</strong> of <strong class="text-dark">${totalFiltered}</strong> entries${filterNote}
+                        </div>
+                        <div class="d-flex align-items-center gap-1">
+                            <span class="text-muted small">Show</span>
+                            <select class="form-select form-select-sm rows-per-page-select" style="width: 75px; font-size: 0.8rem; padding: 0.2rem 0.5rem;">
+                                <option value="10" ${rowsPerPage === 10 ? 'selected' : ''}>10</option>
+                                <option value="25" ${rowsPerPage === 25 ? 'selected' : ''}>25</option>
+                                <option value="50" ${rowsPerPage === 50 ? 'selected' : ''}>50</option>
+                                <option value="100" ${rowsPerPage === 100 ? 'selected' : ''}>100</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div>
+                        <ul class="pagination pagination-sm mb-0">
+                            ${buttonsHtml}
+                        </ul>
+                    </div>
+                `;
+
+                // Wire up button click handlers
+                paginationContainer.querySelectorAll('.page-num').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        currentPage = parseInt(btn.getAttribute('data-page'));
+                        renderPagination();
+                    });
+                });
+
+                const prevBtn = paginationContainer.querySelector('.btn-prev');
+                if (prevBtn && currentPage > 1) {
+                    prevBtn.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        currentPage--;
+                        renderPagination();
+                    });
+                }
+
+                const nextBtn = paginationContainer.querySelector('.btn-next');
+                if (nextBtn && currentPage < totalPages) {
+                    nextBtn.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        currentPage++;
+                        renderPagination();
+                    });
+                }
+
+                const rowsSelect = paginationContainer.querySelector('.rows-per-page-select');
+                if (rowsSelect) {
+                    rowsSelect.addEventListener('change', (e) => {
+                        rowsPerPage = parseInt(e.target.value);
+                        currentPage = 1;
+                        renderPagination();
+                    });
+                }
+            }
+
+            // Hook live search & filter controls (table-specific or page-level)
+            const parentCard = table.closest('.premium-card') || document;
+            const searchInput = document.getElementById('tableSearch') || parentCard.querySelector('input[type="text"][placeholder*="Search"]') || document.querySelector('input[type="text"][placeholder*="Search"]');
+            const statusFilter = document.getElementById('filterStatus') || parentCard.querySelector('select[id*="Status"]') || document.querySelector('select[id*="Status"]');
+            const paymentFilter = document.getElementById('filterPayment') || parentCard.querySelector('select[id*="Payment"]') || document.querySelector('select[id*="Payment"]');
+
+            function applyFilters() {
+                const query = searchInput ? searchInput.value.toLowerCase().trim() : '';
+                const statusVal = statusFilter ? statusFilter.value.toLowerCase().trim() : '';
+                const paymentVal = paymentFilter ? paymentFilter.value.toLowerCase().trim() : '';
+
+                filteredRows = dataRows.filter(row => {
+                    let textMatch = true;
+                    let statusMatch = true;
+                    let paymentMatch = true;
+
+                    if (query) {
+                        textMatch = row.innerText.toLowerCase().includes(query);
+                    }
+                    if (statusVal) {
+                        const rowStatus = (row.getAttribute('data-status') || row.innerText).toLowerCase();
+                        statusMatch = rowStatus.includes(statusVal);
+                    }
+                    if (paymentVal) {
+                        const rowPayment = (row.getAttribute('data-payment') || row.innerText).toLowerCase();
+                        paymentMatch = rowPayment.includes(paymentVal);
+                    }
+
+                    return textMatch && statusMatch && paymentMatch;
+                });
+
+                currentPage = 1;
+                renderPagination();
+            }
+
+            if (searchInput) searchInput.addEventListener('input', applyFilters);
+            if (statusFilter) statusFilter.addEventListener('change', applyFilters);
+            if (paymentFilter) paymentFilter.addEventListener('change', applyFilters);
+
+            // Initial render
+            renderPagination();
+        });
     }
+
+    // Initialize pagination across all tables
+    initTablePagination();
 
     // Export Reports to CSV
     window.exportReportToCSV = function (filename) {
-        const table = document.querySelector('.premium-table');
+        const table = document.querySelector('.premium-table') || document.querySelector('table');
         if (!table) return;
 
         let csv = [];
         const rows = table.querySelectorAll('tr');
         
         for (let i = 0; i < rows.length; i++) {
-            // Check if row is visible
-            if (rows[i].style.display === 'none') continue;
+            // Include header and all data rows (even if paginated)
+            if (rows[i].classList.contains('pagination-empty-row')) continue;
             
             const cols = rows[i].querySelectorAll('td, th');
+            if (cols.length === 0) continue;
             let rowData = [];
             
             for (let j = 0; j < cols.length; j++) {
-                // Clean text content
-                let cleanData = cols[j].innerText.replace(/(\r\n|\n|\r)/gm, '').trim();
+                if (cols[j].classList.contains('no-print')) continue;
+                let cleanData = cols[j].innerText.replace(/(\r\n|\n|\r)/gm, ' ').trim();
                 cleanData = cleanData.replace(/"/g, '""');
                 rowData.push('"' + cleanData + '"');
             }
-            csv.push(rowData.join(','));
+            if (rowData.length > 0) csv.push(rowData.join(','));
         }
 
         const csvString = csv.join('\n');
@@ -221,7 +381,7 @@ document.addEventListener('DOMContentLoaded', function () {
         if (link.download !== undefined) {
             const url = URL.createObjectURL(csvBlob);
             link.setAttribute('href', url);
-            link.setAttribute('download', filename || 'parcelfleet_report.csv');
+            link.setAttribute('download', filename || 'parcelfleet_export.csv');
             link.style.visibility = 'hidden';
             document.body.appendChild(link);
             link.click();

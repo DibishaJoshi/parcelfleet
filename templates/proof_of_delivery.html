@@ -143,9 +143,9 @@
                 <div class="row g-4 border-top border-light pt-4 mt-1">
                     <div class="col-6 border-end border-light">
                         <h6 class="fw-bold text-primary mb-2 uppercase" style="font-size: 0.75rem; letter-spacing: 0.5px;"><i class="fas fa-motorcycle me-1"></i>Dispatch Driver Log</h6>
-                        <div class="fw-bold text-dark mb-1">{% if parcel.assigned_driver %}{{ parcel.assigned_driver.name }}{% else %}Unassigned{% endif %}</div>
+                        <div class="fw-bold text-dark mb-1">{% if parcel.effective_driver %}{{ parcel.effective_driver.name }}{% else %}Unassigned{% endif %}</div>
                         <div class="text-muted" style="font-size: 0.8rem;">
-                            Vehicle: {{ parcel.assigned_driver.vehicle_number if parcel.assigned_driver else '--' }}<br>
+                            Vehicle: {{ parcel.effective_vehicle.license_plate if parcel.effective_vehicle else (parcel.effective_driver.vehicle_number if parcel.effective_driver else '--') }} [{{ parcel.effective_driver.vehicle_type_name if parcel.effective_driver else '' }}]<br>
                             Notes: {{ parcel.delivery_notes or 'Safe handoff completed successfully.' }}
                         </div>
                     </div>
