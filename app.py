@@ -1233,37 +1233,204 @@ def export_reports_excel():
 @login_required
 def api_admin_notifications():
     notifications = []
-    
-    # 1. Maintenance overdue / due soon warnings
-    overdue_maints = VehicleMaintenance.query.filter_by(status='Scheduled').all()
-    for m in overdue_maints:
-        notifications.append({
-            'title': f"Maintenance Due: {m.vehicle.vehicle_code}",
-            'message': f"{m.maintenance_type} scheduled for {m.service_date.strftime('%Y-%m-%d')}.",
-            'type': 'warning'
-        })
-        
-    # 2. Insurance / License expiry warnings
-    vehicles = Vehicle.query.all()
     now = datetime.utcnow()
-    for v in vehicles:
-        if v.insurance_expiry and v.insurance_expiry < now:
-            notifications.append({
-                'title': f"Insurance Expired: {v.vehicle_code}",
-                'message': f"Vehicle {v.license_plate} insurance expired on {v.insurance_expiry.strftime('%Y-%m-%d')}.",
-                'type': 'danger'
-            })
+    role = getattr(current_user, 'role', 'admin')
+    hub_id = get_current_hub_id()
+    hub_name = get_current_hub_name()
+
+    # -------------------------------------------------------------
+    # 1. DRIVER USER ROLE (Courier Driver Account)
+    # -------------------------------------------------------------
+    if role == 'driver':
+        driver = Driver.query.filter_by(user_id=current_user.id).first()
+        if not driver:
+            driver = Driver.query.filter((Driver.email == current_user.email) | (Driver.name == current_user.username)).first()
             
-    drivers = Driver.query.all()
-    for d in drivers:
-        if d.license_expiry and d.license_expiry < now:
+        if driver:
+            # Check driver license expiry
+            if driver.license_expiry:
+                if driver.license_expiry < now:
+                    notifications.append({
+                        'title': "Driving License Expired",
+                        'message': f"Your driver license #{driver.license_number} expired. Please submit renewed credentials.",
+                        'type': 'danger'
+                    })
+                elif (driver.license_expiry - now).days <= 30:
+                    notifications.append({
+                        'title': "License Expiring Soon",
+                        'message': f"Your driving license #{driver.license_number} will expire in {(driver.license_expiry - now).days} days.",
+                        'type': 'warning'
+                    })
+
+            # Check assigned active parcels
+            assigned_parcels = [p for p in (driver.parcels or []) if p.status in ['Assigned', 'Picked Up', 'In Transit', 'Out For Delivery']]
+            if assigned_parcels:
+                notifications.append({
+                    'title': f"Active Deliveries: {len(assigned_parcels)} Parcels",
+                    'message': f"You have {len(assigned_parcels)} active shipment(s) assigned for delivery.",
+                    'type': 'info'
+                })
+
+            # Check active manifest route
+            active_asgn = Assignment.query.filter_by(driver_id=driver.id, assignment_status='Active').first()
+            if active_asgn and active_asgn.manifest:
+                notifications.append({
+                    'title': f"Active Manifest: {active_asgn.manifest.manifest_number}",
+                    'message': f"Assigned to {active_asgn.manifest.route} ({active_asgn.manifest.total_parcels} parcels).",
+                    'type': 'success'
+                })
+
+            # Recent Notification Logs for driver's parcels
+            p_ids = [p.id for p in (driver.parcels or [])]
+            if p_ids:
+                logs = NotificationLog.query.filter(NotificationLog.parcel_id.in_(p_ids)).order_by(NotificationLog.timestamp.desc()).limit(4).all()
+                for log in logs:
+                    notifications.append({
+                        'title': f"Parcel #{log.parcel.tracking_id if log.parcel else ''}",
+                        'message': log.message,
+                        'type': 'warning' if log.type in ['Failed', 'warning'] else 'info'
+                    })
+
+        return jsonify({'notifications': notifications})
+
+    # -------------------------------------------------------------
+    # 2. CUSTOMER / CLIENT ROLE
+    # -------------------------------------------------------------
+    elif role == 'customer':
+        cust = CustomerProfile.query.filter_by(user_id=current_user.id).first()
+        parcels = []
+        if cust:
+            parcels = Parcel.query.filter_by(customer_id=cust.id).order_by(Parcel.created_at.desc()).all()
+        else:
+            parcels = Parcel.query.filter(Parcel.sender_name.ilike(f"%{current_user.username}%")).order_by(Parcel.created_at.desc()).limit(10).all()
+
+        p_ids = [p.id for p in parcels]
+        if p_ids:
+            logs = NotificationLog.query.filter(NotificationLog.parcel_id.in_(p_ids)).order_by(NotificationLog.timestamp.desc()).limit(6).all()
+            for log in logs:
+                notifications.append({
+                    'title': f"Shipment #{log.parcel.tracking_id if log.parcel else ''}",
+                    'message': f"{log.message} ({log.timestamp.strftime('%m-%d %H:%M')})",
+                    'type': 'success' if log.type == 'Delivered' else ('danger' if log.type == 'Failed' else 'info')
+                })
+
+        return jsonify({'notifications': notifications})
+
+    # -------------------------------------------------------------
+    # 3. HUB ADMIN / DISPATCHER / HUB STAFF (Hub-Scoped Roles)
+    # -------------------------------------------------------------
+    elif hub_id or (role in ['hub_admin', 'dispatcher', 'warehouse_staff', 'booking_staff', 'branch_staff'] and hub_name):
+        # 1. Maintenance overdue for hub's vehicles
+        maints_q = VehicleMaintenance.query.filter_by(status='Scheduled')
+        if hub_id:
+            maints_q = maints_q.filter_by(hub_id=hub_id)
+        for m in maints_q.all():
             notifications.append({
-                'title': f"Driver License Expired: {d.name}",
-                'message': f"License #{d.license_number} expired.",
-                'type': 'danger'
+                'title': f"Maintenance Due: {m.vehicle.vehicle_code if m.vehicle else 'Vehicle'}",
+                'message': f"{m.maintenance_type} scheduled for {m.service_date.strftime('%Y-%m-%d')}.",
+                'type': 'warning'
             })
-            
-    return jsonify({'notifications': notifications})
+
+        # 2. Hub vehicles insurance warnings
+        veh_q = Vehicle.query
+        if hub_id:
+            veh_q = veh_q.filter((Vehicle.hub_id == hub_id) | (Vehicle.hub_id == None))
+        for v in veh_q.all():
+            if v.insurance_expiry and v.insurance_expiry < now:
+                notifications.append({
+                    'title': f"Insurance Expired: {v.vehicle_code}",
+                    'message': f"Vehicle {v.license_plate} insurance expired.",
+                    'type': 'danger'
+                })
+
+        # 3. Hub drivers license warnings
+        drv_q = Driver.query
+        if hub_id:
+            drv_q = drv_q.filter((Driver.hub_id == hub_id) | (Driver.hub_id == None))
+        for d in drv_q.all():
+            if d.license_expiry and d.license_expiry < now:
+                notifications.append({
+                    'title': f"Driver License Expired: {d.name}",
+                    'message': f"License #{d.license_number} expired.",
+                    'type': 'danger'
+                })
+
+        # 4. Unassigned parcels awaiting courier at this hub
+        unassigned_count = Parcel.query.filter(
+            (Parcel.status == 'Pending') & 
+            ((Parcel.pickup_hub == hub_name) | (Parcel.delivery_hub == hub_name))
+        ).count()
+        if unassigned_count > 0:
+            notifications.append({
+                'title': f"Unassigned Parcels ({unassigned_count})",
+                'message': f"There are {unassigned_count} pending parcel(s) at {hub_name} Hub awaiting courier dispatch.",
+                'type': 'warning'
+            })
+
+        # 5. Recent notifications at this hub
+        hub_parcels = Parcel.query.filter((Parcel.pickup_hub == hub_name) | (Parcel.delivery_hub == hub_name)).all()
+        p_ids = [p.id for p in hub_parcels]
+        if p_ids:
+            logs = NotificationLog.query.filter(NotificationLog.parcel_id.in_(p_ids)).order_by(NotificationLog.timestamp.desc()).limit(4).all()
+            for log in logs:
+                notifications.append({
+                    'title': f"Hub Alert: #{log.parcel.tracking_id if log.parcel else ''}",
+                    'message': log.message,
+                    'type': 'danger' if log.type in ['Failed', 'danger'] else 'info'
+                })
+
+        return jsonify({'notifications': notifications})
+
+    # -------------------------------------------------------------
+    # 4. SYSTEM ADMIN (Global System-Wide Notifications)
+    # -------------------------------------------------------------
+    else:
+        # Maintenance overdue
+        overdue_maints = VehicleMaintenance.query.filter_by(status='Scheduled').all()
+        for m in overdue_maints:
+            notifications.append({
+                'title': f"Maintenance Due: {m.vehicle.vehicle_code if m.vehicle else 'Vehicle'}",
+                'message': f"{m.maintenance_type} scheduled for {m.service_date.strftime('%Y-%m-%d')}.",
+                'type': 'warning'
+            })
+
+        # Vehicle Insurance Expirations
+        for v in Vehicle.query.all():
+            if v.insurance_expiry and v.insurance_expiry < now:
+                notifications.append({
+                    'title': f"Insurance Expired: {v.vehicle_code}",
+                    'message': f"Vehicle {v.license_plate} insurance expired on {v.insurance_expiry.strftime('%Y-%m-%d')}.",
+                    'type': 'danger'
+                })
+
+        # Driver License Expirations
+        for d in Driver.query.all():
+            if d.license_expiry and d.license_expiry < now:
+                notifications.append({
+                    'title': f"Driver License Expired: {d.name}",
+                    'message': f"License #{d.license_number} expired.",
+                    'type': 'danger'
+                })
+
+        # Pending unassigned parcels
+        unassigned_count = Parcel.query.filter_by(status='Pending').count()
+        if unassigned_count > 0:
+            notifications.append({
+                'title': f"Dispatch Queue: {unassigned_count} Pending",
+                'message': f"{unassigned_count} parcel(s) across fleet awaiting courier assignment.",
+                'type': 'warning'
+            })
+
+        # Recent system-wide logs
+        recent_logs = NotificationLog.query.order_by(NotificationLog.timestamp.desc()).limit(5).all()
+        for log in recent_logs:
+            notifications.append({
+                'title': f"System Alert: #{log.parcel.tracking_id if log.parcel else ''}",
+                'message': log.message,
+                'type': 'danger' if log.type in ['Failed', 'danger'] else 'info'
+            })
+
+        return jsonify({'notifications': notifications})
 
 # --- EXISTING PARCEL, DRIVER & HUB ROUTES (PRESERVED) ---
 
@@ -3128,6 +3295,23 @@ def api_public_rate_calculate():
     dest_hub_name = data.get('destination_hub')
     service_type = data.get('service_type', 'Standard')
     
+    pickup_lat = data.get('pickup_lat')
+    pickup_lng = data.get('pickup_lng')
+    delivery_lat = data.get('delivery_lat')
+    delivery_lng = data.get('delivery_lng')
+    
+    if not origin_hub_name and pickup_lat is not None and pickup_lng is not None:
+        try:
+            origin_hub_name = get_closest_hub(float(pickup_lat), float(pickup_lng))
+        except (ValueError, TypeError):
+            pass
+            
+    if not dest_hub_name and delivery_lat is not None and delivery_lng is not None:
+        try:
+            dest_hub_name = get_closest_hub(float(delivery_lat), float(delivery_lng))
+        except (ValueError, TypeError):
+            pass
+
     try:
         weight = float(data.get('weight', 1.0))
     except (TypeError, ValueError):
@@ -3157,7 +3341,12 @@ def api_public_rate_calculate():
     total_charge = base_rate + (extra_weight * extra_kg_rate)
     
     distance_km = 4.5
-    if origin_hub and dest_hub and origin_hub.name != dest_hub.name:
+    if pickup_lat is not None and pickup_lng is not None and delivery_lat is not None and delivery_lng is not None:
+        try:
+            distance_km = haversine_distance(float(pickup_lat), float(pickup_lng), float(delivery_lat), float(delivery_lng))
+        except (ValueError, TypeError):
+            pass
+    elif origin_hub and dest_hub and origin_hub.name != dest_hub.name:
         _, distance_km = dijkstra(origin_hub.name, dest_hub.name)
         
     return jsonify({
@@ -3168,7 +3357,9 @@ def api_public_rate_calculate():
         'weight': weight,
         'service_type': service_type,
         'delivery_time_hours': est_hours,
-        'distance_km': round(distance_km, 2)
+        'distance_km': round(distance_km, 2),
+        'origin_hub': origin_hub_name,
+        'destination_hub': dest_hub_name
     })
 
 @app.route('/api/public/branches')
@@ -3259,6 +3450,11 @@ def customer_book():
         delivery_lat = float(request.form.get('delivery_latitude', 27.6915))
         delivery_lng = float(request.form.get('delivery_longitude', 85.3331))
         
+        if not pickup_hub:
+            pickup_hub = get_closest_hub(pickup_lat, pickup_lng)
+        if not delivery_hub:
+            delivery_hub = get_closest_hub(delivery_lat, delivery_lng)
+
         if not sender_name or not sender_phone or not receiver_name or not receiver_phone:
             flash("Sender and Receiver contact details are mandatory.", "error")
             return redirect(url_for('customer_book'))

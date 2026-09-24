@@ -92,12 +92,6 @@
                         <span>Delivery Sheets</span>
                     </a>
                 </li>
-                <li class="sidebar-nav-item {% if active_page == 'optimization' %}active{% endif %}">
-                    <a href="{{ url_for('delivery_optimization') }}">
-                        <i class="fa-solid fa-route"></i>
-                        <span>Route Optimization</span>
-                    </a>
-                </li>
                 <li class="sidebar-nav-item {% if active_page == 'vehicles' %}active{% endif %}">
                     <a href="{{ url_for('manage_vehicles') }}">
                         <i class="fa-solid fa-truck"></i>
@@ -159,12 +153,6 @@
                     <a href="{{ url_for('delivery_sheets') }}">
                         <i class="fa-solid fa-clipboard-list"></i>
                         <span>Delivery Sheets</span>
-                    </a>
-                </li>
-                <li class="sidebar-nav-item {% if active_page == 'optimization' %}active{% endif %}">
-                    <a href="{{ url_for('delivery_optimization') }}">
-                        <i class="fa-solid fa-route"></i>
-                        <span>Route Optimization</span>
                     </a>
                 </li>
                 <li class="sidebar-nav-item {% if active_page == 'drivers' %}active{% endif %}">

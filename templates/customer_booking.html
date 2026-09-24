@@ -10,7 +10,7 @@
             <div class="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom">
                 <div>
                     <h4 class="fw-bold text-dark mb-1"><i class="fas fa-box-open text-primary me-2"></i>Shipment Booking Wizard</h4>
-                    <p class="text-muted small mb-0">Fill in the sender and recipient details. Rate is calculated dynamically from live pricing matrix.</p>
+                    <p class="text-muted small mb-0">Fill in sender and recipient details. Home pickup & doorstep delivery route is automatically pinpointed on the map.</p>
                 </div>
                 <a href="{{ url_for('customer_dashboard') }}" class="btn btn-outline-secondary rounded-pill px-3 btn-sm">
                     <i class="fas fa-arrow-left me-1"></i>Back to Dashboard
@@ -18,7 +18,7 @@
             </div>
 
             <form method="POST" action="{{ url_for('customer_book') }}" id="customerBookingForm">
-                <!-- ROW 1: SHIPPER & CONSIGNEE -->
+                <!-- ROW 1: SHIPPER & CONSIGNEE DETAILS -->
                 <div class="row g-4 mb-4">
                     <!-- Sender / Shipper -->
                     <div class="col-md-6">
@@ -29,21 +29,9 @@
                                 <label class="form-label small fw-semibold">Sender Name / Store *</label>
                                 <input type="text" name="sender_name" class="form-control" value="{{ profile.company_name or profile.contact_person }}" required>
                             </div>
-                            <div class="mb-3">
+                            <div class="mb-0">
                                 <label class="form-label small fw-semibold">Sender Mobile Phone *</label>
                                 <input type="tel" name="sender_phone" class="form-control" value="{{ profile.phone }}" required>
-                            </div>
-                            <div class="mb-3">
-                                <label class="form-label small fw-semibold">Pickup Address *</label>
-                                <input type="text" name="pickup_address" class="form-control" value="{{ profile.address or '' }}" placeholder="e.g. Ward 4, Balaju, Kathmandu" required>
-                            </div>
-                            <div class="mb-0">
-                                <label class="form-label small fw-semibold">Nearest Pickup Hub *</label>
-                                <select class="form-select" name="pickup_hub" id="bookPickupHub" onchange="updateEstimatedRate()">
-                                    {% for h in hubs %}
-                                    <option value="{{ h.name }}">{{ h.name }} Hub</option>
-                                    {% endfor %}
-                                </select>
                             </div>
                         </div>
                     </div>
@@ -52,7 +40,7 @@
                     <div class="col-md-6">
                         <div class="p-3 bg-light rounded-4 border border-light h-100">
                             <div class="d-flex justify-content-between align-items-center mb-2">
-                                <h6 class="fw-bold text-success mb-0"><i class="fas fa-location-dot me-2"></i>2. Recipient (Consignee) Details</h6>
+                                <h6 class="fw-bold text-success mb-0"><i class="fas fa-user-check me-2"></i>2. Recipient (Consignee) Details</h6>
                                 {% if saved_addresses %}
                                 <select class="form-select form-select-sm w-auto" onchange="fillSavedAddress(this)">
                                     <option value="">-- Load Saved Address --</option>
@@ -67,29 +55,62 @@
                                 <label class="form-label small fw-semibold">Receiver Full Name *</label>
                                 <input type="text" name="receiver_name" id="recName" class="form-control" placeholder="e.g. Sita Sharma" required>
                             </div>
-                            <div class="mb-3">
+                            <div class="mb-0">
                                 <label class="form-label small fw-semibold">Receiver Phone *</label>
                                 <input type="tel" name="receiver_phone" id="recPhone" class="form-control" placeholder="98XXXXXXXX" required>
-                            </div>
-                            <div class="mb-3">
-                                <label class="form-label small fw-semibold">Destination Street Address *</label>
-                                <input type="text" name="delivery_address" id="recAddress" class="form-control" placeholder="e.g. House 45, New Baneshwor" required>
-                            </div>
-                            <div class="mb-0">
-                                <label class="form-label small fw-semibold">Destination Delivery Hub *</label>
-                                <select class="form-select" name="delivery_hub" id="bookDeliveryHub" onchange="updateEstimatedRate()">
-                                    {% for h in hubs %}
-                                    <option value="{{ h.name }}" {% if loop.index == 2 %}selected{% endif %}>{{ h.name }} Hub</option>
-                                    {% endfor %}
-                                </select>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- ROW 2: PACKAGE SPECIFICATIONS & PRICING -->
+                <!-- ROW 2: HOME DELIVERY ROUTE SELECTOR (MAP SECTION) -->
                 <div class="p-3 bg-light rounded-4 border border-light mb-4">
-                    <h6 class="fw-bold text-dark mb-3"><i class="fas fa-weight-hanging text-primary me-2"></i>3. Parcel Specifications & Service Level</h6>
+                    <h6 class="fw-bold text-primary mb-3"><i class="fas fa-map-location-dot me-2"></i>Home Delivery Route Selector</h6>
+                    
+                    <div class="row g-3 mb-3">
+                        <div class="col-12 col-md-6">
+                            <label for="pickup_address" class="form-label small fw-semibold">Pickup Address *</label>
+                            <div class="input-group">
+                                <input type="text" class="form-control" name="pickup_address" id="pickup_address" value="{{ profile.address or 'Thamel, Kathmandu' }}" placeholder="e.g. Thamel, Kathmandu" required>
+                                <button type="button" class="btn btn-outline-primary" id="btnSearchPickup"><i class="fas fa-search-location"></i> Find</button>
+                            </div>
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label for="delivery_address" class="form-label small fw-semibold">Delivery Address *</label>
+                            <div class="input-group">
+                                <input type="text" class="form-control" name="delivery_address" id="delivery_address" placeholder="e.g. New Baneshwor, Kathmandu" required>
+                                <button type="button" class="btn btn-outline-success" id="btnSearchDelivery"><i class="fas fa-search-location"></i> Find</button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Interactive Leaflet Map -->
+                    <div id="customerBookMap" style="height: 320px; width: 100%; border-radius: 12px;" class="mb-3 border border-light shadow-sm"></div>
+                    
+                    <!-- Lat / Lng Coordinate Inputs -->
+                    <div class="row g-3">
+                        <div class="col-6 col-md-3">
+                            <label for="pickup_latitude" class="form-label small fw-semibold">Pickup Lat *</label>
+                            <input type="number" step="0.000001" class="form-control form-control-sm" name="pickup_latitude" id="pickup_latitude" value="27.7154" min="27.50" max="27.90" required>
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <label for="pickup_longitude" class="form-label small fw-semibold">Pickup Lng *</label>
+                            <input type="number" step="0.000001" class="form-control form-control-sm" name="pickup_longitude" id="pickup_longitude" value="85.3123" min="85.10" max="85.55" required>
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <label for="delivery_latitude" class="form-label small fw-semibold">Delivery Lat *</label>
+                            <input type="number" step="0.000001" class="form-control form-control-sm" name="delivery_latitude" id="delivery_latitude" value="27.6915" min="27.50" max="27.90" required>
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <label for="delivery_longitude" class="form-label small fw-semibold">Delivery Lng *</label>
+                            <input type="number" step="0.000001" class="form-control form-control-sm" name="delivery_longitude" id="delivery_longitude" value="85.3331" min="85.10" max="85.55" required>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ROW 3: PACKAGE SPECIFICATIONS & PRICING -->
+                <div class="p-3 bg-light rounded-4 border border-light mb-4">
+                    <h6 class="fw-bold text-dark mb-3"><i class="fas fa-weight-hanging text-primary me-2"></i>3. Package Specifications & Service Level</h6>
                     
                     <div class="row g-3 align-items-end">
                         <div class="col-md-3">
@@ -152,13 +173,36 @@
     </div>
 </div>
 
+<style>
+    .custom-map-icon {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #FFFFFF;
+        font-size: 1rem;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.15);
+        border: 2px solid #FFFFFF;
+    }
+    .custom-map-icon.pickup { background-color: #F59E0B; }
+    .custom-map-icon.delivery { background-color: #22C55E; }
+</style>
+
 <script>
 function fillSavedAddress(sel) {
     if (!sel.value) return;
     const parts = sel.value.split('|');
     document.getElementById('recName').value = parts[0] || '';
     document.getElementById('recPhone').value = parts[1] || '';
-    document.getElementById('recAddress').value = parts[2] || '';
+    document.getElementById('delivery_address').value = parts[2] || '';
+    
+    // Auto-search address on map if loaded
+    const btnDeliv = document.getElementById('btnSearchDelivery');
+    if (btnDeliv && parts[2]) {
+        btnDeliv.click();
+    }
 }
 
 function toggleCodField(sel) {
@@ -171,8 +215,10 @@ function toggleCodField(sel) {
 }
 
 function updateEstimatedRate() {
-    const origin = document.getElementById('bookPickupHub').value;
-    const dest = document.getElementById('bookDeliveryHub').value;
+    const pLat = parseFloat(document.getElementById('pickup_latitude').value) || 27.7154;
+    const pLng = parseFloat(document.getElementById('pickup_longitude').value) || 85.3123;
+    const dLat = parseFloat(document.getElementById('delivery_latitude').value) || 27.6915;
+    const dLng = parseFloat(document.getElementById('delivery_longitude').value) || 85.3331;
     const weight = document.getElementById('bookWeight').value || 1.0;
     const serviceType = document.getElementById('bookServiceType').value;
 
@@ -180,8 +226,10 @@ function updateEstimatedRate() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-            origin_hub: origin,
-            destination_hub: dest,
+            pickup_lat: pLat,
+            pickup_lng: pLng,
+            delivery_lat: dLat,
+            delivery_lng: dLng,
             weight: parseFloat(weight),
             service_type: serviceType
         })
@@ -190,13 +238,238 @@ function updateEstimatedRate() {
     .then(data => {
         if (data.success) {
             document.getElementById('liveChargeDisplay').innerText = 'Rs. ' + Number(data.total_charge).toFixed(2);
-            document.getElementById('routePreviewText').innerText = origin + ' ➔ ' + dest + ' (' + data.distance_km + ' km)';
+            const routeStr = (data.origin_hub && data.destination_hub)
+                ? (data.origin_hub + ' Hub ➔ ' + data.destination_hub + ' Hub (' + data.distance_km + ' km)')
+                : ('Home Pickup ➔ Doorstep Delivery (' + data.distance_km + ' km)');
+            document.getElementById('routePreviewText').innerText = routeStr;
             document.getElementById('etaPreviewText').innerText = data.delivery_time_hours + ' Hours';
         }
     })
     .catch(err => console.error(err));
 }
 
-document.addEventListener('DOMContentLoaded', updateEstimatedRate);
+document.addEventListener('DOMContentLoaded', function () {
+    updateEstimatedRate();
+
+    let customerBookMap = null;
+    let pickupMarker = null;
+    let deliveryMarker = null;
+    
+    const createCustomIcon = (iconClass, colorClass) => {
+        return L.divIcon({
+            html: `<div class="custom-map-icon ${colorClass}"><i class="${iconClass}"></i></div>`,
+            className: 'custom-leaflet-icon',
+            iconSize: [36, 36],
+            iconAnchor: [18, 36]
+        });
+    };
+
+    const geocodeAddress = (query, marker, mapInstance, latInput, lngInput, addressInput, btnElement) => {
+        if (!query || query.trim().length === 0) {
+            alert("Please enter an address or location name to find.");
+            return;
+        }
+
+        const cleanQ = query.trim();
+        const originalBtnHtml = btnElement ? btnElement.innerHTML : null;
+        if (btnElement) {
+            btnElement.disabled = true;
+            btnElement.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Finding...';
+        }
+
+        const queryList = [
+            cleanQ.toLowerCase().includes('nepal') ? cleanQ : `${cleanQ}, Kathmandu, Nepal`,
+            cleanQ.toLowerCase().includes('kathmandu') ? cleanQ : `${cleanQ}, Kathmandu`,
+            cleanQ
+        ];
+
+        const trySearch = (index) => {
+            if (index >= queryList.length) {
+                if (btnElement) {
+                    btnElement.disabled = false;
+                    btnElement.innerHTML = originalBtnHtml;
+                }
+                alert(`Location "${cleanQ}" not found. Please verify the spelling or manually drag the pin marker on the map.`);
+                return;
+            }
+
+            const currentQuery = queryList[index];
+            const url = `https://nominatim.openstreetmap.org/search?format=json&countrycodes=np&limit=5&q=${encodeURIComponent(currentQuery)}`;
+
+            fetch(url)
+                .then(res => res.json())
+                .then(data => {
+                    if (data && data.length > 0) {
+                        let bestMatch = data.find(item => {
+                            const lat = parseFloat(item.lat);
+                            const lng = parseFloat(item.lon);
+                            return lat >= 27.50 && lat <= 27.90 && lng >= 85.10 && lng <= 85.55;
+                        });
+
+                        if (!bestMatch) {
+                            bestMatch = data[0];
+                        }
+
+                        const lat = parseFloat(bestMatch.lat);
+                        const lng = parseFloat(bestMatch.lon);
+
+                        if (lat >= 27.50 && lat <= 27.90 && lng >= 85.10 && lng <= 85.55) {
+                            marker.setLatLng([lat, lng]);
+                            latInput.value = lat.toFixed(6);
+                            lngInput.value = lng.toFixed(6);
+
+                            const simpleAddr = bestMatch.display_name.split(',').slice(0, 3).join(',').trim();
+                            addressInput.value = simpleAddr;
+
+                            mapInstance.flyTo([lat, lng], 15, { animate: true, duration: 0.8 });
+                            marker.bindPopup(`<b>${simpleAddr}</b><br><small class="text-muted">Lat: ${lat.toFixed(4)}, Lng: ${lng.toFixed(4)}</small>`).openPopup();
+
+                            updateEstimatedRate();
+
+                            if (btnElement) {
+                                btnElement.disabled = false;
+                                btnElement.innerHTML = '<i class="fas fa-check text-success me-1"></i>Found';
+                                setTimeout(() => { if (btnElement) btnElement.innerHTML = originalBtnHtml; }, 2000);
+                            }
+                        } else {
+                            if (btnElement) {
+                                btnElement.disabled = false;
+                                btnElement.innerHTML = originalBtnHtml;
+                            }
+                            alert(`Found "${bestMatch.display_name}", but it is outside the active Kathmandu Valley boundaries (Lat: 27.50-27.90, Lng: 85.10-85.55).`);
+                        }
+                    } else {
+                        trySearch(index + 1);
+                    }
+                })
+                .catch(err => {
+                    console.error("Geocoding network error:", err);
+                    trySearch(index + 1);
+                });
+        };
+
+        trySearch(0);
+    };
+
+    const reverseGeocode = (lat, lng, addressInput) => {
+        fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`)
+            .then(res => res.json())
+            .then(data => {
+                if (data && data.display_name) {
+                    const cleanAddr = data.display_name.split(',').slice(0, 3).join(',').trim();
+                    addressInput.value = cleanAddr;
+                }
+            })
+            .catch(err => console.error(err));
+    };
+
+    const mapElement = document.getElementById('customerBookMap');
+    if (mapElement) {
+        customerBookMap = L.map('customerBookMap').setView([27.7172, 85.3240], 12);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '© OpenStreetMap'
+        }).addTo(customerBookMap);
+        
+        const pickupIcon = createCustomIcon('fas fa-box', 'pickup');
+        const deliveryIcon = createCustomIcon('fas fa-home', 'delivery');
+        
+        const pLat = parseFloat(document.getElementById('pickup_latitude').value) || 27.7154;
+        const pLng = parseFloat(document.getElementById('pickup_longitude').value) || 85.3123;
+        const dLat = parseFloat(document.getElementById('delivery_latitude').value) || 27.6915;
+        const dLng = parseFloat(document.getElementById('delivery_longitude').value) || 85.3331;
+        
+        pickupMarker = L.marker([pLat, pLng], { icon: pickupIcon, draggable: true }).addTo(customerBookMap).bindPopup("<b>Pickup Location</b> (Drag pin to adjust)");
+        deliveryMarker = L.marker([dLat, dLng], { icon: deliveryIcon, draggable: true }).addTo(customerBookMap).bindPopup("<b>Delivery Destination</b> (Drag pin to adjust)");
+        
+        const syncCoords = () => {
+            const pickupPos = pickupMarker.getLatLng();
+            const deliveryPos = deliveryMarker.getLatLng();
+            
+            document.getElementById('pickup_latitude').value = pickupPos.lat.toFixed(6);
+            document.getElementById('pickup_longitude').value = pickupPos.lng.toFixed(6);
+            document.getElementById('delivery_latitude').value = deliveryPos.lat.toFixed(6);
+            document.getElementById('delivery_longitude').value = deliveryPos.lng.toFixed(6);
+
+            updateEstimatedRate();
+        };
+        
+        pickupMarker.on('drag', syncCoords);
+        pickupMarker.on('dragend', function() {
+            syncCoords();
+            reverseGeocode(pickupMarker.getLatLng().lat, pickupMarker.getLatLng().lng, document.getElementById('pickup_address'));
+        });
+        
+        deliveryMarker.on('drag', syncCoords);
+        deliveryMarker.on('dragend', function() {
+            syncCoords();
+            reverseGeocode(deliveryMarker.getLatLng().lat, deliveryMarker.getLatLng().lng, document.getElementById('delivery_address'));
+        });
+        
+        const group = new L.featureGroup([pickupMarker, deliveryMarker]);
+        customerBookMap.fitBounds(group.getBounds().pad(0.15));
+        
+        const updateMarkerFromInputs = () => {
+            const plat = parseFloat(document.getElementById('pickup_latitude').value) || 27.7154;
+            const plng = parseFloat(document.getElementById('pickup_longitude').value) || 85.3123;
+            const dlat = parseFloat(document.getElementById('delivery_latitude').value) || 27.6915;
+            const dlng = parseFloat(document.getElementById('delivery_longitude').value) || 85.3331;
+            
+            pickupMarker.setLatLng([plat, plng]);
+            deliveryMarker.setLatLng([dlat, dlng]);
+
+            updateEstimatedRate();
+        };
+        
+        ['pickup_latitude', 'pickup_longitude', 'delivery_latitude', 'delivery_longitude'].forEach(id => {
+            document.getElementById(id).addEventListener('change', updateMarkerFromInputs);
+        });
+        
+        const btnPickup = document.getElementById('btnSearchPickup');
+        const btnDelivery = document.getElementById('btnSearchDelivery');
+
+        if (btnPickup) {
+            btnPickup.addEventListener('click', function() {
+                geocodeAddress(
+                    document.getElementById('pickup_address').value,
+                    pickupMarker,
+                    customerBookMap,
+                    document.getElementById('pickup_latitude'),
+                    document.getElementById('pickup_longitude'),
+                    document.getElementById('pickup_address'),
+                    this
+                );
+            });
+        }
+
+        if (btnDelivery) {
+            btnDelivery.addEventListener('click', function() {
+                geocodeAddress(
+                    document.getElementById('delivery_address').value,
+                    deliveryMarker,
+                    customerBookMap,
+                    document.getElementById('delivery_latitude'),
+                    document.getElementById('delivery_longitude'),
+                    document.getElementById('delivery_address'),
+                    this
+                );
+            });
+        }
+
+        document.getElementById('pickup_address').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                btnPickup.click();
+            }
+        });
+
+        document.getElementById('delivery_address').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                btnDelivery.click();
+            }
+        });
+    }
+});
 </script>
 {% endblock %}
